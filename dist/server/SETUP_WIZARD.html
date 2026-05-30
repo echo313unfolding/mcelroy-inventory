@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UGSI McElroy Shop — Setup Wizard</title>
+<style>
+:root { --navy: #1A3761; --accent: #E8792B; --green: #2E7D32; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f2f5; min-height: 100vh; }
+.wizard-header {
+  background: linear-gradient(135deg, #0F2440, var(--navy));
+  color: white; padding: 30px; text-align: center;
+}
+.wizard-header h1 { font-size: 24px; font-weight: 300; }
+.wizard-header h1 span { font-weight: 700; }
+.wizard-header .sub { color: rgba(255,255,255,0.6); font-size: 13px; margin-top: 4px; }
+
+.steps { max-width: 700px; margin: 30px auto; padding: 0 20px; }
+.step {
+  background: white; border-radius: 12px; padding: 24px;
+  margin-bottom: 16px; border: 2px solid #e0e0e0;
+  transition: border-color 0.3s;
+}
+.step.active { border-color: var(--accent); }
+.step.done { border-color: var(--green); }
+.step-header {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 12px;
+  cursor: pointer;
+}
+.step-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: #e0e0e0; color: #888;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px; flex-shrink: 0;
+}
+.step.active .step-num { background: var(--accent); color: white; }
+.step.done .step-num { background: var(--green); color: white; }
+.step-title { font-size: 16px; font-weight: 600; }
+.step-body { display: none; margin-top: 12px; }
+.step.active .step-body { display: block; }
+.step-body p { font-size: 14px; color: #555; line-height: 1.6; margin-bottom: 12px; }
+
+.btn {
+  display: inline-block; padding: 12px 28px; border-radius: 8px;
+  font-size: 15px; font-weight: 600; cursor: pointer; border: none;
+  text-decoration: none; text-align: center;
+}
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: #C45E15; }
+.btn-navy { background: var(--navy); color: white; }
+.btn-green { background: var(--green); color: white; }
+.btn-outline { background: white; color: var(--navy); border: 2px solid var(--navy); }
+.btn + .btn { margin-left: 8px; }
+
+.check-result {
+  padding: 12px 16px; border-radius: 8px; margin: 12px 0;
+  font-size: 14px; font-weight: 500;
+}
+.check-ok { background: #E8F5E9; color: var(--green); }
+.check-fail { background: #FFEBEE; color: #B71C1C; }
+.check-wait { background: #FFF3E0; color: #E65100; }
+
+.note {
+  background: #E3EBF5; padding: 12px 16px; border-radius: 8px;
+  font-size: 13px; color: var(--navy); margin: 12px 0;
+  border-left: 4px solid var(--navy);
+}
+
+.progress-bar {
+  height: 6px; background: #e0e0e0; border-radius: 3px;
+  margin: 20px 0; overflow: hidden;
+}
+.progress-bar .fill {
+  height: 100%; background: var(--accent); border-radius: 3px;
+  transition: width 0.5s;
+}
+
+.footer {
+  text-align: center; padding: 30px; color: #999; font-size: 12px;
+}
+</style>
+</head>
+<body>
+
+<div class="wizard-header">
+  <h1><span>UGSI McElroy Shop</span> — Setup Wizard</h1>
+  <div class="sub">Underground Solutions Division — Azuria Water Solutions</div>
+  <div class="progress-bar"><div class="fill" id="progressFill" style="width: 0%"></div></div>
+</div>
+
+<div class="steps">
+
+  <!-- STEP 1: Docker Desktop -->
+  <div class="step active" id="step1">
+    <div class="step-header" onclick="goStep(1)">
+      <div class="step-num">1</div>
+      <div class="step-title">Install Docker Desktop</div>
+    </div>
+    <div class="step-body">
+      <p>Docker runs the inventory database on your laptop. It's free and takes about 5 minutes to install.</p>
+      <p>
+        <a href="https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+           class="btn btn-primary" id="downloadDockerBtn" target="_blank"
+           onclick="markDownloaded()">
+          Download Docker Desktop
+        </a>
+      </p>
+      <p style="font-size:13px;color:#888;margin-top:8px">
+        After downloading, double-click the installer and follow the prompts.<br>
+        Accept all defaults — just click <strong>Next</strong>, <strong>Next</strong>, <strong>Install</strong>.<br>
+        When it asks to restart your computer, do it.
+      </p>
+      <div class="note">
+        After restart, Docker Desktop will start automatically. You'll see a whale icon
+        in your system tray (bottom-right of your screen). Wait until it says "Docker Desktop is running."
+      </div>
+      <p>
+        <button class="btn btn-navy" onclick="checkDocker()">I Installed Docker — Check It</button>
+      </p>
+      <div id="dockerCheck"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2: Start the Server -->
+  <div class="step" id="step2">
+    <div class="step-header" onclick="goStep(2)">
+      <div class="step-num">2</div>
+      <div class="step-title">Start the Shop Server</div>
+    </div>
+    <div class="step-body">
+      <p>Now let's start the parts database. This runs in the background on your laptop.</p>
+      <p>
+        <button class="btn btn-primary" onclick="startServer()" id="startBtn">
+          Start Shop Server
+        </button>
+      </p>
+      <div id="serverStatus"></div>
+      <p style="font-size:13px;color:#888;margin-top:12px">
+        First time takes 2-3 minutes to download the database software.<br>
+        After that, it starts in about 30 seconds.
+      </p>
+      <div class="note">
+        The server runs in the background. You can close this setup wizard after it's running.
+        The shop app will be available whenever your laptop is on.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3: Open the App -->
+  <div class="step" id="step3">
+    <div class="step-header" onclick="goStep(3)">
+      <div class="step-num">3</div>
+      <div class="step-title">Open the Shop App</div>
+    </div>
+    <div class="step-body">
+      <p>Your parts inventory is ready! Open it in your browser:</p>
+      <p>
+        <a href="http://localhost:8080/shop/" class="btn btn-primary" target="_blank">
+          Open UGSI McElroy Shop
+        </a>
+      </p>
+      <div class="note">
+        <strong>Bookmark this page!</strong> You'll use it every day.<br>
+        Right-click the link above and choose "Create Shortcut" to put it on your desktop.
+      </div>
+      <p style="margin-top:16px"><strong>First time?</strong> The app will sync 6,299 parts from the database.
+        This takes about 60 seconds. After that it loads instantly from cache.</p>
+    </div>
+  </div>
+
+  <!-- STEP 4: iPhone Setup -->
+  <div class="step" id="step4">
+    <div class="step-header" onclick="goStep(4)">
+      <div class="step-num">4</div>
+      <div class="step-title">Set Up Your iPhone (Optional)</div>
+    </div>
+    <div class="step-body">
+      <p>Access the shop app from your iPhone while on the shop WiFi network.</p>
+
+      <p><strong>Find your laptop's IP address:</strong></p>
+      <p>
+        <button class="btn btn-outline" onclick="showIP()">Show My IP Address</button>
+      </p>
+      <div id="ipResult"></div>
+
+      <p style="margin-top:16px"><strong>On your iPhone:</strong></p>
+      <ol style="font-size:14px;color:#555;line-height:2;padding-left:20px">
+        <li>Make sure you're connected to the <strong>shop WiFi</strong></li>
+        <li>Open <strong>Safari</strong></li>
+        <li>Type: <strong>http://<span id="ipPlaceholder">YOUR-IP</span>:8080/shop/</strong></li>
+        <li>Tap the <strong>Share</strong> button (square with arrow)</li>
+        <li>Tap <strong>"Add to Home Screen"</strong></li>
+        <li>Tap <strong>"Add"</strong> — it'll look like a regular app!</li>
+      </ol>
+
+      <div class="note">
+        The app works offline after the first sync. So even if you walk away from
+        WiFi, you can still look up parts and machines.
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 5: Done -->
+  <div class="step" id="step5">
+    <div class="step-header" onclick="goStep(5)">
+      <div class="step-num">5</div>
+      <div class="step-title">You're All Set!</div>
+    </div>
+    <div class="step-body">
+      <p>Your UGSI McElroy Shop is up and running. Here's what you can do:</p>
+      <ul style="font-size:14px;color:#555;line-height:2;padding-left:20px">
+        <li><strong>Scan tab:</strong> Scan barcodes or type machine IDs / part numbers</li>
+        <li><strong>Fleet tab:</strong> See all 36 machines, tap to change status or assign to jobs</li>
+        <li><strong>Parts tab:</strong> Browse all 6,299 parts, filter by category or machine</li>
+        <li><strong>Report tab:</strong> Download/email/share inventory and fleet reports</li>
+        <li><strong>Settings tab:</strong> Developer options and future integrations</li>
+      </ul>
+
+      <div class="note">
+        <strong>Daily use:</strong> Just open your browser and go to
+        <a href="http://localhost:8080/shop/" style="color:var(--navy)">localhost:8080/shop/</a>.
+        Docker starts automatically when your laptop boots up — no extra steps needed.
+      </div>
+
+      <p style="margin-top:16px">
+        <a href="http://localhost:8080/shop/" class="btn btn-green" target="_blank">
+          Open Shop App
+        </a>
+        <button class="btn btn-outline" onclick="createShortcut()">
+          Create Desktop Shortcut
+        </button>
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  UGSI McElroy Shop v1.0 — Built for Underground Solutions<br>
+  Questions? Contact your shop supervisor.
+</div>
+
+<script>
+let currentStep = 1;
+
+function goStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.step').forEach((el, i) => {
+    el.classList.remove('active');
+    if (i + 1 < n) el.classList.add('done');
+    if (i + 1 === n) { el.classList.add('active'); el.classList.remove('done'); }
+  });
+  document.getElementById('progressFill').style.width = ((n - 1) / 4 * 100) + '%';
+}
+
+function nextStep() {
+  if (currentStep < 5) goStep(currentStep + 1);
+}
+
+function markDownloaded() {
+  setTimeout(() => {
+    document.getElementById('dockerCheck').innerHTML =
+      '<div class="check-wait">Downloading... After install and restart, click the button above to check.</div>';
+  }, 1000);
+}
+
+function checkDocker() {
+  const el = document.getElementById('dockerCheck');
+  el.innerHTML = '<div class="check-wait">Checking for Docker...</div>';
+
+  // Try to reach the Docker-proxied InvenTree
+  fetch('http://localhost:8080/api/', { method: 'HEAD', signal: AbortSignal.timeout(5000) })
+    .then(r => {
+      el.innerHTML = '<div class="check-ok">Docker is running and the server is reachable! You can skip to Step 3.</div>';
+      document.getElementById('step1').classList.add('done');
+      document.getElementById('step2').classList.add('done');
+      goStep(3);
+    })
+    .catch(() => {
+      // Docker might be running but server not started yet
+      el.innerHTML = '<div class="check-wait">Docker may be installed but the shop server isn\'t running yet. ' +
+        'If Docker Desktop shows "running" in your system tray, proceed to Step 2.</div>' +
+        '<p style="margin-top:8px"><button class="btn btn-navy" onclick="nextStep()">Go to Step 2</button></p>';
+    });
+}
+
+function startServer() {
+  const el = document.getElementById('serverStatus');
+  el.innerHTML = '<div class="check-wait">Starting the server... This window will run the setup command.</div>';
+
+  // Create and trigger the batch file download
+  const bat = `@echo off
+echo ============================================
+echo  UGSI McElroy Shop - Starting Server
+echo ============================================
+echo.
+cd /d "%~dp0"
+docker-compose up -d
+echo.
+echo Server is starting... please wait 60 seconds.
+timeout /t 60 /nobreak
+start http://localhost:8080/shop/
+echo.
+echo Done! You can close this window.
+echo The server runs in the background.
+pause
+`;
+  const blob = new Blob([bat], { type: 'application/bat' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'START_SERVER.bat';
+  link.click();
+
+  el.innerHTML =
+    '<div class="check-wait">' +
+    '<strong>A file called START_SERVER.bat was downloaded.</strong><br>' +
+    'Move it to the same folder as docker-compose.yml, then double-click it.<br>' +
+    'Wait for it to finish (about 2-3 minutes first time).' +
+    '</div>' +
+    '<p style="margin-top:12px"><button class="btn btn-navy" onclick="checkServer()">Server Started — Check It</button></p>';
+}
+
+function checkServer() {
+  const el = document.getElementById('serverStatus');
+  el.innerHTML = '<div class="check-wait">Checking server...</div>';
+
+  fetch('http://localhost:8080/shop/', { signal: AbortSignal.timeout(10000) })
+    .then(r => {
+      if (r.ok) {
+        el.innerHTML = '<div class="check-ok">Server is running! The shop app is ready.</div>';
+        nextStep();
+      } else {
+        el.innerHTML = '<div class="check-fail">Server responded but something is wrong (status ' + r.status + '). ' +
+          'Make sure Docker Desktop is running and try the START_SERVER.bat again.</div>';
+      }
+    })
+    .catch(() => {
+      el.innerHTML = '<div class="check-fail">Can\'t reach the server yet. Make sure:<br>' +
+        '1. Docker Desktop is running (whale icon in system tray)<br>' +
+        '2. You ran START_SERVER.bat<br>' +
+        '3. Wait 2-3 minutes for first-time setup</div>' +
+        '<p style="margin-top:8px"><button class="btn btn-outline" onclick="checkServer()">Try Again</button></p>';
+    });
+}
+
+function showIP() {
+  const el = document.getElementById('ipResult');
+  el.innerHTML = '<div class="note" style="font-size:14px">' +
+    '<strong>To find your IP address on Windows:</strong><br>' +
+    '1. Click the Start menu<br>' +
+    '2. Type <strong>cmd</strong> and press Enter<br>' +
+    '3. Type <strong>ipconfig</strong> and press Enter<br>' +
+    '4. Look for <strong>IPv4 Address</strong> under "Wireless LAN" or "Ethernet"<br>' +
+    '5. It will look like <strong>192.168.1.xxx</strong><br><br>' +
+    'Type that number into your iPhone\'s Safari: <strong>http://192.168.1.xxx:8080/shop/</strong>' +
+    '</div>';
+}
+
+function createShortcut() {
+  // Download a .url shortcut file for Windows
+  const shortcut = '[InternetShortcut]\nURL=http://localhost:8080/shop/\nIconIndex=0\n';
+  const blob = new Blob([shortcut], { type: 'application/internet-shortcut' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'UGSI McElroy Shop.url';
+  link.click();
+  alert('Shortcut downloaded! Move it to your Desktop for easy access.');
+}
+</script>
+</body>
+</html>

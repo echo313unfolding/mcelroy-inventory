@@ -168,6 +168,49 @@ header .sub { font-size: 11px; opacity: 0.7; }
 .machine-card .row { display: flex; justify-content: space-between; align-items: center; }
 .machine-card .job-tag { font-size: 12px; color: #1565C0; margin-top: 4px; }
 .machine-card .hours { font-size: 12px; color: #888; }
+.machine-card .quick-actions {
+  display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap;
+}
+.machine-card .quick-actions button {
+  padding: 5px 12px; border-radius: 14px; font-size: 11px; font-weight: 600;
+  border: 1.5px solid var(--border); background: white; cursor: pointer;
+}
+.machine-card .quick-actions button.active-status {
+  background: var(--navy); color: white; border-color: var(--navy);
+}
+.machine-card .quick-actions button.field-status {
+  background: var(--accent); color: white; border-color: var(--accent);
+}
+.machine-card .quick-actions button.repair-status {
+  background: #B71C1C; color: white; border-color: #B71C1C;
+}
+
+/* Wizard-style edit form */
+.edit-field { margin-bottom: 14px; }
+.edit-field label {
+  display: block; font-size: 11px; color: #888; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 4px; font-weight: 600;
+}
+.edit-field input, .edit-field select {
+  width: 100%; padding: 12px 14px; border: 2px solid var(--border); border-radius: 10px;
+  font-size: 15px; font-family: inherit; background: white;
+}
+.edit-field input:focus, .edit-field select:focus {
+  border-color: var(--navy); outline: none;
+}
+.status-picker {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.status-picker button {
+  padding: 14px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  border: 2px solid var(--border); background: white; cursor: pointer;
+  transition: all 0.15s;
+}
+.status-picker button.selected { transform: scale(1.02); }
+.status-picker .s-shop.selected { background: var(--navy-light); border-color: var(--navy); color: var(--navy); }
+.status-picker .s-field.selected { background: var(--accent-light); border-color: var(--accent); color: var(--accent-dark); }
+.status-picker .s-repair.selected { background: #FDEDED; border-color: #B71C1C; color: #B71C1C; }
+.status-picker .s-oos.selected { background: #eee; border-color: #666; color: #666; }
 
 /* Section header */
 .section-hdr {
@@ -1171,11 +1214,18 @@ function renderFleet() {
         '<div class="row">' +
         '<div><div class="card-title">' + esc(m.id) + '</div>' +
         (m.serial ? '<div class="card-sub">S/N: ' + esc(m.serial) + '</div>' : '') +
+        (m.location ? '<div class="card-sub" style="color:var(--blue-mid)">' + esc(m.location) + '</div>' : '') +
         '</div>' +
         '<span class="card-badge ' + badgeClass + '">' + esc(m.status) + '</span>' +
         '</div>' +
         (job ? '<div class="job-tag">' + esc(job.name) + (job.location ? ' - ' + esc(job.location) : '') + '</div>' : '') +
         (m.hours ? '<div class="hours">' + esc(m.hours) + ' hrs</div>' : '') +
+        '<div class="quick-actions">' +
+          '<button class="' + (m.status==='Shop'?'active-status':'') + '" onclick="quickSetStatus(\'' + esc(m.id) + '\',\'Shop\',event)">Shop</button>' +
+          '<button class="' + (m.status==='Field'?'field-status':'') + '" onclick="quickSetStatus(\'' + esc(m.id) + '\',\'Field\',event)">Field</button>' +
+          '<button class="' + (m.status==='Needs Repair'?'repair-status':'') + '" onclick="quickSetStatus(\'' + esc(m.id) + '\',\'Needs Repair\',event)">Repair</button>' +
+          '<button onclick="showEditMachine(\'' + esc(m.id) + '\');event.stopPropagation()" style="background:var(--navy-light);color:var(--navy)">Edit</button>' +
+        '</div>' +
         '</div>';
     });
   });
@@ -1224,26 +1274,85 @@ function showEditMachine(id) {
   if (!m) return;
   const jobs = loadJobs();
 
-  let jobOpts = '<option value="">No job assigned</option>';
+  let jobOpts = '<option value="">— No job assigned —</option>';
   Object.values(jobs).filter(j => j.status === 'Active').forEach(j => {
     jobOpts += '<option value="' + esc(j.id) + '"' + (m.job === j.id ? ' selected' : '') + '>' + esc(j.name) + '</option>';
   });
 
+  const statuses = [
+    { key: 'Shop', label: 'In Shop', cls: 's-shop', icon: '🏭' },
+    { key: 'Field', label: 'In Field', cls: 's-field', icon: '🚜' },
+    { key: 'Needs Repair', label: 'Needs Repair', cls: 's-repair', icon: '🔧' },
+    { key: 'Out of Service', label: 'Out of Service', cls: 's-oos', icon: '⛔' },
+  ];
+
   document.getElementById('modalContent').innerHTML =
-    '<h2>' + esc(m.id) + '</h2>' +
-    '<div style="color:#888;font-size:13px">' + esc(m.model) + ' - ' + esc(m.engine_type) + '</div>' +
-    '<label>McElroy Serial #</label><input id="mSerial" value="' + esc(m.serial) + '" placeholder="From machine nameplate">' +
-    '<label>Kubota Engine Serial</label><input id="mEngine" value="' + esc(m.engine_serial) + '" placeholder="From engine plate">' +
-    '<label>Engine Hours</label><input id="mHours" type="number" value="' + esc(m.hours) + '" placeholder="Current reading">' +
-    '<label>Status</label><select id="mStatus">' +
-    ['Shop','Field','Needs Repair','Out of Service'].map(s =>
-      '<option' + (m.status===s?' selected':'') + '>' + s + '</option>'
-    ).join('') + '</select>' +
-    '<label>Assigned Job</label><select id="mJob">' + jobOpts + '</select>' +
-    '<label>Notes</label><input id="mNotes" value="' + esc(m.notes) + '">' +
-    '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')">Save</button>' +
-    '<button class="close-btn" onclick="closeModal()" style="background:#888">Cancel</button>';
+    '<div style="text-align:center;margin-bottom:12px">' +
+      '<h2 style="font-size:18px;margin-bottom:2px">' + esc(m.id) + '</h2>' +
+      '<div style="color:#888;font-size:13px">' + esc(m.model) + ' — ' + esc(m.engine_type) + '</div>' +
+    '</div>' +
+
+    // Status picker - big tap targets
+    '<div class="edit-field">' +
+      '<label>Where is this machine?</label>' +
+      '<div class="status-picker">' +
+        statuses.map(s =>
+          '<button class="' + s.cls + (m.status === s.key ? ' selected' : '') +
+          '" onclick="pickStatus(this,\'' + s.key + '\')" type="button">' +
+          s.icon + ' ' + s.label + '</button>'
+        ).join('') +
+      '</div>' +
+      '<input type="hidden" id="mStatus" value="' + esc(m.status) + '">' +
+    '</div>' +
+
+    // Job assignment
+    '<div class="edit-field">' +
+      '<label>Assigned to Job</label>' +
+      '<select id="mJob">' + jobOpts + '</select>' +
+    '</div>' +
+
+    // Machine details
+    '<div class="edit-field">' +
+      '<label>McElroy Serial # (on machine nameplate)</label>' +
+      '<input id="mSerial" value="' + esc(m.serial) + '" placeholder="Type or scan serial number">' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Kubota Engine Serial (on engine plate)</label>' +
+      '<input id="mEngine" value="' + esc(m.engine_serial) + '" placeholder="Type engine serial">' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<div class="edit-field">' +
+        '<label>Engine Hours</label>' +
+        '<input id="mHours" type="number" value="' + esc(m.hours) + '" placeholder="Current reading">' +
+      '</div>' +
+      '<div class="edit-field">' +
+        '<label>Location / Bay</label>' +
+        '<input id="mLocation" value="' + esc(m.location || '') + '" placeholder="e.g. Bay 3">' +
+      '</div>' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Notes</label>' +
+      '<input id="mNotes" value="' + esc(m.notes) + '" placeholder="Anything — oil change due, new carriage, etc.">' +
+    '</div>' +
+
+    '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')" style="font-size:16px;padding:14px">Save Changes</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
   openModal();
+}
+
+function pickStatus(btn, status) {
+  // Deselect all, select this one
+  btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('mStatus').value = status;
+}
+
+function quickSetStatus(id, status, event) {
+  event.stopPropagation();
+  const machines = loadMachines();
+  machines[id].status = status;
+  saveMachines(machines);
+  renderFleet();
 }
 
 function saveMachine(id) {
@@ -1253,6 +1362,7 @@ function saveMachine(id) {
   machines[id].hours = document.getElementById('mHours').value.trim();
   machines[id].status = document.getElementById('mStatus').value;
   machines[id].job = document.getElementById('mJob').value;
+  machines[id].location = document.getElementById('mLocation').value.trim();
   machines[id].notes = document.getElementById('mNotes').value.trim();
   saveMachines(machines);
   closeModal();
