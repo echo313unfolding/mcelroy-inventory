@@ -11,7 +11,7 @@ services:
     environment:
       POSTGRES_DB: inventree
       POSTGRES_USER: inventree
-      POSTGRES_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+      POSTGRES_PASSWORD: ${INVENTREE_DB_PASSWORD:?Set INVENTREE_DB_PASSWORD in .env}
     volumes:
       - inventree-db-data:/var/lib/postgresql/data
     networks:
@@ -37,12 +37,12 @@ services:
       INVENTREE_DB_PORT: 5432
       INVENTREE_DB_NAME: inventree
       INVENTREE_DB_USER: inventree
-      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:?Set INVENTREE_DB_PASSWORD in .env}
       INVENTREE_CACHE_HOST: inventree-cache
       INVENTREE_CACHE_PORT: 6379
-      INVENTREE_ADMIN_USER: ${INVENTREE_ADMIN_USER:-shopmanager}
-      INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD:-ugsi2026!}
-      INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL:-shop@undergroundsolutions.com}
+      INVENTREE_ADMIN_USER: ${INVENTREE_ADMIN_USER:?Set in .env}
+      INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD:?Set in .env}
+      INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL:?Set in .env}
       INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8080}
       INVENTREE_PLUGINS_ENABLED: "true"
     volumes:
@@ -63,7 +63,7 @@ services:
       INVENTREE_DB_PORT: 5432
       INVENTREE_DB_NAME: inventree
       INVENTREE_DB_USER: inventree
-      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:?Set INVENTREE_DB_PASSWORD in .env}
       INVENTREE_CACHE_HOST: inventree-cache
       INVENTREE_CACHE_PORT: 6379
       INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8080}

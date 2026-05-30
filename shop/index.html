@@ -612,27 +612,15 @@ const FAMILIES = [
 ];
 
 // ============================================================
-// LOCAL STORAGE: Machines & Jobs
+// FLEET DATA — Server-authoritative via InvenTree API
+// Machines are serial-tracked stock items. Status = stock location.
+// Jobs are stored in localStorage (local to this device for now).
 // ============================================================
-function loadMachines() {
-  let m = localStorage.getItem('ugsi_machines');
-  if (m) return JSON.parse(m);
-  // First load: pre-populate from fleet template
-  let machines = {};
-  FAMILIES.forEach(f => {
-    for (let i = 1; i <= f.count; i++) {
-      const id = f.prefix + '-' + String(i).padStart(3, '0');
-      machines[id] = {
-        id, family: f.family, model: f.model, engine_type: f.engine,
-        serial: '', engine_serial: '', hours: '',
-        status: 'Shop', job: '', notes: ''
-      };
-    }
-  });
-  localStorage.setItem('ugsi_machines', JSON.stringify(machines));
-  return machines;
-}
-function saveMachines(m) { localStorage.setItem('ugsi_machines', JSON.stringify(m)); }
+let allMachines = {};  // Loaded from InvenTree
+let fleetLocations = {};  // Fleet location pk -> name mapping
+
+function loadMachines() { return allMachines; }
+function saveMachines(m) { allMachines = m; }
 
 function loadJobs() {
   let j = localStorage.getItem('ugsi_jobs');
@@ -640,16 +628,181 @@ function loadJobs() {
 }
 function saveJobs(j) { localStorage.setItem('ugsi_jobs', JSON.stringify(j)); }
 
+async function syncFleetFromAPI() {
+  if (!AUTH) return;
+  try {
+    // Find the "Fleet" parent location
+    const locs = await apiAll('stock/location');
+    const fleetParent = locs.find(l => l.name === 'Fleet');
+    if (!fleetParent) return;
+
+    // Map fleet sub-locations (Shop, Field, Repair, Out of Service)
+    fleetLocations = {};
+    const fleetSubs = locs.filter(l => l.parent === fleetParent.pk);
+    fleetSubs.forEach(l => { fleetLocations[l.pk] = l.name; });
+
+    // Also find job sub-locations under Field
+    const fieldLoc = fleetSubs.find(l => l.name === 'Field');
+
+    // Load all machine stock items (parts in Machines category)
+    const cats = await apiAll('part/category');
+    const machinesCat = cats.find(c => c.name === 'Machines');
+    if (!machinesCat) return;
+
+    // Get machine part templates (InvenTree includes child categories automatically)
+    const mpResp = await api('part', { category: machinesCat.pk, limit: 100 });
+    const machineParts = Array.isArray(mpResp) ? mpResp : (mpResp.results || []);
+    const machinePartPks = machineParts.map(p => p.pk);
+
+    // Get all stock items for machine parts
+    const machines = {};
+    for (const partPk of machinePartPks) {
+      const items = await api('stock', { part: partPk, limit: 500 });
+      const results = items.results || items;
+      const partInfo = machineParts.find(p => p.pk === partPk);
+      const family = (partInfo.IPN || '').split('-')[1] || '';
+
+      results.forEach(item => {
+        if (!item.serial) return;
+        // Parse notes JSON for extra fields
+        let meta = {};
+        try { meta = JSON.parse(item.notes || '{}'); } catch(e) {}
+
+        const locName = fleetLocations[item.location] || 'Shop';
+        machines[item.serial] = {
+          id: item.serial,
+          stock_pk: item.pk,
+          part_pk: partPk,
+          family: family,
+          model: partInfo.name || '',
+          engine_type: meta.engine_type || partInfo.description?.match(/\(([^)]+)\)/)?.[1] || '',
+          serial: meta.mcelvoy_serial || '',
+          engine_serial: meta.engine_serial || '',
+          hours: meta.hours || '',
+          status: locName,
+          location: meta.location_detail || '',
+          job: meta.job || '',
+          notes: meta.notes || '',
+          _location_pk: item.location,
+        };
+      });
+    }
+
+    allMachines = machines;
+    localStorage.setItem('ugsi_machines_cache', JSON.stringify(machines));
+    localStorage.setItem('ugsi_fleet_locations', JSON.stringify(fleetLocations));
+  } catch(e) {
+    console.warn('Fleet sync failed, using cache:', e);
+    // Fall back to cache
+    const cached = localStorage.getItem('ugsi_machines_cache');
+    if (cached) allMachines = JSON.parse(cached);
+    const cachedLocs = localStorage.getItem('ugsi_fleet_locations');
+    if (cachedLocs) fleetLocations = JSON.parse(cachedLocs);
+    if (Object.keys(allMachines).length === 0) {
+      // Last resort: generate from template (offline, no server ever reached)
+      FAMILIES.forEach(f => {
+        for (let i = 1; i <= f.count; i++) {
+          const id = f.prefix + '-' + String(i).padStart(3, '0');
+          allMachines[id] = {
+            id, family: f.family, model: f.model, engine_type: f.engine,
+            serial: '', engine_serial: '', hours: '',
+            status: 'Shop', job: '', location: '', notes: ''
+          };
+        }
+      });
+    }
+  }
+}
+
+async function saveMachineToServer(id) {
+  const m = allMachines[id];
+  if (!m || !m.stock_pk || !AUTH) return;
+
+  // 1. Update notes (metadata) on the stock item
+  const meta = JSON.stringify({
+    engine_type: m.engine_type,
+    mcelvoy_serial: m.serial,
+    engine_serial: m.engine_serial,
+    hours: m.hours,
+    job: m.job,
+    location_detail: m.location,
+    notes: m.notes,
+  });
+
+  try {
+    await fetch(BASE + '/api/stock/' + m.stock_pk + '/', {
+      method: 'PATCH',
+      headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: meta }),
+    });
+
+    // 2. If status changed, move stock item to correct fleet location
+    const targetLocName = m.status;
+    const targetLocPk = Object.entries(fleetLocations).find(([pk, name]) => name === targetLocName);
+    if (targetLocPk && parseInt(targetLocPk[0]) !== m._location_pk) {
+      await fetch(BASE + '/api/stock/transfer/', {
+        method: 'POST',
+        headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{ pk: m.stock_pk, quantity: 1 }],
+          location: parseInt(targetLocPk[0]),
+          notes: 'Status changed to ' + targetLocName,
+        }),
+      });
+      m._location_pk = parseInt(targetLocPk[0]);
+    }
+
+    // Update local cache
+    localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
+  } catch(e) {
+    console.error('Failed to save machine to server:', e);
+  }
+}
+
 // ============================================================
 // INVENTREE API
 // ============================================================
 async function getToken() {
-  // Get API token using basic auth, then use token for all subsequent requests
-  const basic = 'Basic ' + btoa('shopmanager:ugsi2026!');
+  // Check for saved token first
+  const saved = localStorage.getItem('ugsi_api_token');
+  if (saved) {
+    AUTH = 'Token ' + saved;
+    // Verify token is still valid
+    try {
+      const check = await fetch(BASE + '/api/user/me/', { headers: { 'Authorization': AUTH } });
+      if (check.ok) return;
+    } catch(e) {}
+    // Token expired — clear and re-auth
+    localStorage.removeItem('ugsi_api_token');
+    AUTH = '';
+  }
+
+  // Prompt for credentials (first time or token expired)
+  const creds = getSavedCreds();
+  const basic = 'Basic ' + btoa(creds.user + ':' + creds.pass);
   const r = await fetch(BASE + '/api/user/token/', { headers: { 'Authorization': basic } });
-  if (!r.ok) throw new Error('Auth failed: ' + r.status);
+  if (!r.ok) {
+    // Bad creds — clear saved and ask again
+    localStorage.removeItem('ugsi_creds_user');
+    throw new Error('Auth failed — check username/password in Settings');
+  }
   const d = await r.json();
   AUTH = 'Token ' + d.token;
+  localStorage.setItem('ugsi_api_token', d.token);
+}
+
+function getSavedCreds() {
+  let user = localStorage.getItem('ugsi_creds_user');
+  let pass = localStorage.getItem('ugsi_creds_pass');
+  if (!user || !pass) {
+    user = prompt('InvenTree Username:', 'shopmanager') || 'shopmanager';
+    pass = prompt('InvenTree Password:') || '';
+    if (user && pass) {
+      localStorage.setItem('ugsi_creds_user', user);
+      localStorage.setItem('ugsi_creds_pass', pass);
+    }
+  }
+  return { user, pass };
 }
 
 async function api(endpoint, params = {}) {
@@ -803,7 +956,13 @@ async function init() {
     syncFromAPI(!!cache);  // silent=true if we already have cached data showing
   }
 
-  // 3. Always render fleet (fleet data is always in localStorage)
+  // 3. Load fleet from server (or cache)
+  // Ensure we have auth before fleet sync (getToken may not have run yet
+  // if syncFromAPI was fire-and-forget above)
+  if (!AUTH) {
+    try { await getToken(); } catch(e) { console.warn('Auth failed for fleet sync:', e); }
+  }
+  await syncFleetFromAPI();
   renderFleet();
 
   // 4. Dismiss splash screen
@@ -840,6 +999,7 @@ async function syncFromAPI(silent) {
     const freshCache = await fetchFromAPI();
     saveCache(freshCache);
     hydrateFromCache(freshCache);
+    await syncFleetFromAPI();
     buildUI();
     status.textContent = allParts.length.toLocaleString() + ' parts (synced just now)';
   } catch (e) {
@@ -1349,22 +1509,20 @@ function pickStatus(btn, status) {
 
 function quickSetStatus(id, status, event) {
   event.stopPropagation();
-  const machines = loadMachines();
-  machines[id].status = status;
-  saveMachines(machines);
+  allMachines[id].status = status;
+  saveMachineToServer(id);  // Persist to InvenTree
   renderFleet();
 }
 
 function saveMachine(id) {
-  const machines = loadMachines();
-  machines[id].serial = document.getElementById('mSerial').value.trim();
-  machines[id].engine_serial = document.getElementById('mEngine').value.trim();
-  machines[id].hours = document.getElementById('mHours').value.trim();
-  machines[id].status = document.getElementById('mStatus').value;
-  machines[id].job = document.getElementById('mJob').value;
-  machines[id].location = document.getElementById('mLocation').value.trim();
-  machines[id].notes = document.getElementById('mNotes').value.trim();
-  saveMachines(machines);
+  allMachines[id].serial = document.getElementById('mSerial').value.trim();
+  allMachines[id].engine_serial = document.getElementById('mEngine').value.trim();
+  allMachines[id].hours = document.getElementById('mHours').value.trim();
+  allMachines[id].status = document.getElementById('mStatus').value;
+  allMachines[id].job = document.getElementById('mJob').value;
+  allMachines[id].location = document.getElementById('mLocation').value.trim();
+  allMachines[id].notes = document.getElementById('mNotes').value.trim();
+  saveMachineToServer(id);  // Persist to InvenTree
   closeModal();
   renderFleet();
 }

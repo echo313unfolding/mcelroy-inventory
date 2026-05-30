@@ -1,0 +1,15 @@
+name,parent,description
+McElroy Parts,,618/900/1200 fleet
+DataLogger,McElroy Parts,
+Electrical,McElroy Parts,
+Engine & Fuel,McElroy Parts,
+Facer & Blade,McElroy Parts,
+Filters,McElroy Parts,
+Heater,McElroy Parts,
+Hydraulic,McElroy Parts,
+Hydraulic Cylinders & Rams,Hydraulic,
+Jaw Inserts,McElroy Parts,
+Jaws & Carriage,McElroy Parts,
+Other,McElroy Parts,
+Seals & O-Rings,Hydraulic,
+Track & Drive,McElroy Parts,
