@@ -1,0 +1,1750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="UGSI Parts">
+<link rel="manifest" href="manifest.json">
+<title>UGSI Shop</title>
+<style>
+:root {
+  /* Azuria Water Solutions / Underground Solutions brand */
+  --navy: #1A3761; --navy-light: #E3EBF5; --navy-dark: #0F2440;
+  --blue-mid: #2B6CB0; --blue-pipe: #5B9BD5;
+  --accent: #E8792B; --accent-light: #FEF0E5; --accent-dark: #C45E15;
+  /* Aliases for easy migration */
+  --green: var(--navy); --green-light: var(--navy-light); --green-dark: var(--navy-dark);
+  --blue: #E8F0FE; --yellow: #FFF2CC; --red: #FDEDED; --red-text: #B71C1C;
+  --orange: #FFF3E0; --gray: #f5f5f5; --border: #ddd;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--gray); color: #333; padding-bottom: 60px; }
+button { font-family: inherit; }
+
+/* Splash screen */
+.splash {
+  position: fixed; inset: 0; z-index: 999; background: var(--navy);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: opacity 0.5s ease;
+}
+.splash.fade { opacity: 0; pointer-events: none; }
+.splash-logo {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, var(--accent) 18%, var(--accent-dark) 22%, var(--navy-dark) 26%, var(--blue-mid) 40%, var(--navy) 60%);
+  box-shadow: 0 0 40px rgba(43,108,176,0.4);
+  margin-bottom: 24px;
+}
+.splash h1 { color: white; font-size: 28px; font-weight: 300; letter-spacing: 2px; }
+.splash h1 span { font-weight: 700; }
+.splash .splash-sub { color: var(--blue-pipe); font-size: 13px; margin-top: 4px; letter-spacing: 1px; }
+.splash .splash-div { color: white; font-size: 12px; margin-top: 16px; padding: 5px 16px; border: 1px solid var(--accent); border-radius: 20px; }
+.splash .splash-loading { color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 32px; }
+.splash .accent-bar { width: 60px; height: 3px; background: var(--accent); border-radius: 2px; margin-top: 20px; }
+
+/* Header */
+header {
+  background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 100%);
+  color: white; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  border-bottom: 3px solid var(--accent);
+}
+header h1 { font-size: 17px; font-weight: 600; }
+header .sub { font-size: 11px; opacity: 0.7; }
+
+/* Bottom tab bar */
+.tab-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  background: white; border-top: 1px solid var(--border);
+  display: flex; padding-bottom: var(--safe-bottom);
+}
+.tab-bar button {
+  flex: 1; padding: 6px 0 4px; border: none; background: none;
+  font-size: 10px; color: #888; cursor: pointer; display: flex;
+  flex-direction: column; align-items: center; gap: 2px;
+}
+.tab-bar button.active { color: var(--accent); }
+.tab-bar button svg { width: 22px; height: 22px; }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* Cards */
+.card {
+  background: white; margin: 6px 10px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.card:active { background: var(--blue); }
+.card-title { font-weight: 600; font-size: 14px; }
+.card-sub { font-size: 12px; color: #888; margin-top: 2px; }
+.card-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 11px; font-weight: 500;
+}
+.badge-shop { background: var(--navy-light); color: var(--navy); }
+.badge-field { background: var(--accent-light); color: var(--accent-dark); }
+.badge-repair { background: var(--red); color: var(--red-text); }
+.badge-low { background: var(--orange); color: #E65100; }
+.badge-ok { background: var(--navy-light); color: var(--navy); }
+.badge-out { background: var(--red); color: var(--red-text); }
+
+/* Scan panel */
+.scan-input-row {
+  display: flex; gap: 8px; padding: 12px; background: white;
+  border-bottom: 1px solid var(--border);
+}
+.scan-input-row input {
+  flex: 1; padding: 10px 12px; border: 2px solid var(--blue-mid); border-radius: 8px;
+  font-size: 15px; font-family: monospace;
+}
+.scan-input-row button {
+  padding: 10px 16px; background: var(--accent); color: white; border: none;
+  border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
+  white-space: nowrap;
+}
+#scanCameraBtn {
+  padding: 10px 14px; background: var(--navy); color: white; border: none;
+  border-radius: 8px; cursor: pointer;
+}
+#scannerContainer {
+  display: none; background: black; position: relative;
+}
+#scannerContainer .close-scanner {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+  background: rgba(0,0,0,0.6); color: white; border: none; border-radius: 50%;
+  width: 36px; height: 36px; font-size: 20px; cursor: pointer;
+}
+#reader { width: 100%; }
+
+/* Scan result */
+.scan-result {
+  margin: 10px; border-radius: 12px; overflow: hidden;
+  border: 2px solid var(--navy);
+}
+.scan-result-header {
+  background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 70%, var(--blue-mid) 100%);
+  color: white; padding: 12px 16px;
+  font-weight: 600; font-size: 15px;
+  border-bottom: 2px solid var(--accent);
+}
+.scan-result-body { padding: 12px 16px; background: white; }
+.result-row {
+  display: flex; justify-content: space-between; padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0; font-size: 13px;
+}
+.result-row:last-child { border-bottom: none; }
+.result-row .k { color: #888; }
+.result-row .v { font-weight: 500; text-align: right; max-width: 60%; }
+.parts-for-machine { margin-top: 8px; }
+.parts-for-machine h4 { font-size: 13px; color: var(--green); padding: 8px 0 4px; }
+.compat-part {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px;
+}
+.compat-part .stock-pill {
+  padding: 2px 8px; border-radius: 8px; font-size: 11px; font-weight: 600;
+}
+
+/* Search bar */
+.search-bar {
+  padding: 10px 12px; background: white; border-bottom: 1px solid var(--border);
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.search-bar input {
+  flex: 1; min-width: 150px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 8px; font-size: 14px;
+}
+.search-bar select {
+  padding: 8px; border: 1px solid var(--border); border-radius: 8px;
+  font-size: 13px; background: white;
+}
+.search-bar .count { font-size: 12px; color: #888; white-space: nowrap; }
+
+/* Fleet machine card */
+.machine-card { cursor: pointer; }
+.machine-card .row { display: flex; justify-content: space-between; align-items: center; }
+.machine-card .job-tag { font-size: 12px; color: #1565C0; margin-top: 4px; }
+.machine-card .hours { font-size: 12px; color: #888; }
+
+/* Section header */
+.section-hdr {
+  padding: 8px 14px; font-weight: 600; font-size: 13px; color: white;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--blue-mid) 100%);
+  margin-top: 4px; border-left: 4px solid var(--accent);
+}
+
+/* Part card */
+.part-row {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 8px;
+}
+.part-info { flex: 1; min-width: 0; }
+.part-name { font-weight: 600; font-size: 13px; word-break: break-word; }
+.part-sku { font-size: 11px; color: #888; font-family: monospace; }
+.part-cat { font-size: 11px; color: var(--blue-mid); }
+.part-compat { font-size: 11px; color: #666; }
+.part-stock { text-align: right; white-space: nowrap; }
+.part-stock .qty { font-size: 16px; font-weight: 700; }
+.part-stock .loc { font-size: 10px; color: #888; }
+.part-stock .price { font-size: 11px; color: #666; }
+
+/* Modal */
+.modal-bg {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 200; align-items: flex-end; justify-content: center;
+}
+.modal-bg.open { display: flex; }
+.modal {
+  background: white; border-radius: 16px 16px 0 0; width: 100%; max-width: 500px;
+  max-height: 85vh; overflow-y: auto; padding: 20px;
+}
+.modal h2 { font-size: 16px; margin-bottom: 4px; }
+.modal .close-btn {
+  display: block; width: 100%; padding: 12px; margin-top: 12px; border: none;
+  background: var(--green); color: white; border-radius: 8px; font-size: 14px; cursor: pointer;
+}
+.modal label { display: block; font-size: 12px; color: #888; margin-top: 10px; }
+.modal input, .modal select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 14px; margin-top: 4px;
+}
+.modal select { background: white; }
+.modal .save-btn {
+  display: block; width: 100%; padding: 12px; margin-top: 16px; border: none;
+  background: var(--accent); color: white; border-radius: 8px; font-size: 14px;
+  cursor: pointer; font-weight: 600;
+}
+.modal .danger-btn {
+  display: block; width: 100%; padding: 10px; margin-top: 8px; border: 1px solid var(--red-text);
+  background: white; color: var(--red-text); border-radius: 8px; font-size: 13px; cursor: pointer;
+}
+
+/* Report */
+.report-card {
+  background: white; margin: 8px 10px; padding: 16px; border-radius: 10px;
+  border: 1px solid var(--border); cursor: pointer;
+}
+.report-card:active { background: var(--blue); }
+.report-card h3 { font-size: 14px; margin-bottom: 4px; }
+.report-card p { font-size: 12px; color: #888; }
+
+/* Stats */
+.stats-row {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 10px;
+}
+.stat-box {
+  background: white; border-radius: 10px; padding: 14px; text-align: center;
+  border: 1px solid var(--border);
+}
+.stat-box .num { font-size: 24px; font-weight: 700; color: var(--navy); }
+.stat-box .lbl { font-size: 11px; color: #888; }
+
+/* Empty state */
+.empty { text-align: center; padding: 40px 20px; color: #999; font-size: 14px; }
+.loading { text-align: center; padding: 40px; color: #888; }
+
+/* Job tag in results */
+.job-info {
+  background: var(--blue); padding: 8px 12px; border-radius: 8px; margin-top: 8px;
+  font-size: 13px;
+}
+.job-info strong { color: #1565C0; }
+
+/* Report viewer */
+.report-actions {
+  display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.report-actions button {
+  flex: 1; min-width: 80px; padding: 10px 12px; border: none; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer; display: flex;
+  align-items: center; justify-content: center; gap: 6px;
+}
+.report-actions .dl-btn { background: var(--navy); color: white; }
+.report-actions .email-btn { background: var(--accent); color: white; }
+.report-actions .share-btn { background: var(--blue-mid); color: white; }
+.report-actions .copy-btn { background: #666; color: white; }
+.report-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+  display: block; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.report-table th {
+  background: var(--navy); color: white; padding: 8px 10px;
+  text-align: left; white-space: nowrap; position: sticky; top: 0;
+}
+.report-table td {
+  padding: 6px 10px; border-bottom: 1px solid #eee; white-space: nowrap;
+}
+.report-table tr:nth-child(even) { background: #f9f9f9; }
+.report-table tr:hover { background: var(--navy-light); }
+.report-summary {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.report-summary .pill {
+  padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600;
+}
+
+@media (min-width: 600px) {
+  .stats-row { grid-template-columns: repeat(4, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- Splash Screen -->
+<div class="splash" id="splash">
+  <div class="splash-logo"></div>
+  <h1><span>Azuria</span></h1>
+  <div class="splash-sub">WATER SOLUTIONS</div>
+  <div class="splash-div">Underground Solutions Division</div>
+  <div class="accent-bar"></div>
+  <div class="splash-loading" id="splashMsg">Loading parts inventory...</div>
+</div>
+
+<header>
+  <div>
+    <h1>UGSI McElroy Shop</h1>
+    <div class="sub">Underground Solutions Division - Azuria Water Solutions</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="sub" id="connStatus">Loading...</span>
+    <button onclick="syncNow()" id="syncBtn" title="Sync with InvenTree"
+      style="background:var(--accent);border:none;color:white;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;white-space:nowrap;font-weight:600">
+      Sync Now
+    </button>
+  </div>
+</header>
+
+<!-- ============ SCAN PANEL ============ -->
+<div id="scan-panel" class="panel active">
+  <div class="scan-input-row">
+    <input type="text" id="scanInput" placeholder="Machine ID or Part #" autocomplete="off"
+           onkeydown="if(event.key==='Enter')doLookup()">
+    <button onclick="doLookup()">Look Up</button>
+    <button id="scanCameraBtn" onclick="toggleScanner()" title="Open camera scanner">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/>
+        <rect x="6" y="12" width="4" height="4"/><rect x="14" y="12" width="4" height="4"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="scannerContainer">
+    <button class="close-scanner" onclick="toggleScanner()">X</button>
+    <div id="reader"></div>
+  </div>
+
+  <div id="scanResult">
+    <div class="empty" id="scanHint">
+      <p style="font-size:18px;margin-bottom:8px;">Scan or type to look up</p>
+      <p><strong>Machine QR:</strong> Shows machine info + all compatible parts in stock</p>
+      <p style="margin-top:4px"><strong>Part barcode:</strong> Shows what machines it fits + where it's stored</p>
+      <p style="margin-top:12px;font-size:12px;color:#aaa">
+        Tip: Tech calls in? Ask for the machine ID on the QR sticker<br>
+        Type it here to see what parts you have for that machine
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FLEET PANEL ============ -->
+<div id="fleet-panel" class="panel">
+  <div class="search-bar">
+    <input type="search" id="fleetSearch" placeholder="Search machines..." oninput="filterFleet()">
+    <select id="fleetStatusFilter" onchange="filterFleet()">
+      <option value="">All Status</option>
+      <option value="Shop">Shop</option>
+      <option value="Field">Field</option>
+      <option value="Needs Repair">Needs Repair</option>
+      <option value="Out of Service">Out of Service</option>
+    </select>
+    <button onclick="showAddJob()" style="padding:8px 12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">+ Job</button>
+  </div>
+  <div id="fleetList"></div>
+</div>
+
+<!-- ============ PARTS PANEL ============ -->
+<div id="parts-panel" class="panel">
+  <div class="search-bar">
+    <input type="search" id="partsSearch" placeholder="Search by name, SKU..." oninput="filterParts()">
+    <select id="partsCatFilter" onchange="filterParts()"><option value="">All Categories</option></select>
+    <select id="partsMachineFilter" onchange="filterParts()">
+      <option value="">All Machines</option>
+      <option value="618">618</option>
+      <option value="900">900</option>
+      <option value="1200">1200</option>
+    </select>
+    <span class="count" id="partsCount"></span>
+  </div>
+  <div id="partsList"></div>
+</div>
+
+<!-- ============ REPORT PANEL ============ -->
+<div id="report-panel" class="panel">
+  <div class="stats-row" id="reportStats"></div>
+
+  <div class="report-card" onclick="showInteractiveReport('inventory')">
+    <h3>Inventory Snapshot</h3>
+    <p>Full parts list with stock levels, locations, prices</p>
+  </div>
+  <div class="report-card" onclick="showInteractiveReport('lowstock')">
+    <h3>Low Stock Alert</h3>
+    <p>Parts below reorder point — flag for purchasing</p>
+  </div>
+  <div class="report-card" onclick="showInteractiveReport('fleet')">
+    <h3>Fleet Status</h3>
+    <p>All machines with serials, status, job assignments</p>
+  </div>
+  <div class="report-card" onclick="showInteractiveReport('jobs')">
+    <h3>Job Summary</h3>
+    <p>Active jobs with assigned machines and locations</p>
+  </div>
+  <div class="report-card" onclick="syncNow()">
+    <h3>Sync Now</h3>
+    <p id="syncStatus">Force refresh from InvenTree. Last sync: checking...</p>
+  </div>
+  <div style="padding:12px 14px;font-size:12px;color:#888">
+    Tap any report to preview, then download CSV, email, or share.<br>
+    Parts catalog is cached locally. Works offline after first sync.<br>
+    Auto-refreshes every 4 hours when connected.
+  </div>
+</div>
+
+<!-- ============ REPORT VIEWER MODAL ============ -->
+<div class="modal-bg" id="reportModalBg" onclick="if(event.target===this)closeReportModal()">
+  <div class="modal" style="max-height:90vh">
+    <div id="reportModalContent"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<!-- ============ SETTINGS PANEL ============ -->
+<div id="settings-panel" class="panel">
+  <div class="section-hdr">System Settings</div>
+  <div class="card" id="settingsContent">
+    <div style="font-size:13px;color:#888;margin-bottom:12px">
+      Configure integrations, developer options, and system connections.
+    </div>
+
+    <div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Connection</div>
+      <div class="result-row"><span class="k">InvenTree Server</span><span class="v" id="setServer">—</span></div>
+      <div class="result-row"><span class="k">Status</span><span class="v" id="setConnStatus">—</span></div>
+      <div class="result-row"><span class="k">Parts Loaded</span><span class="v" id="setPartsCount">—</span></div>
+      <div class="result-row"><span class="k">Cache Age</span><span class="v" id="setCacheAge">—</span></div>
+    </div>
+
+    <div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Developer Mode</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="setDevMode" onchange="toggleDevMode()" style="width:18px;height:18px">
+        Enable dev mode (shows API logs, debug info, MCP status)
+      </label>
+      <div id="devModePanel" style="display:none;margin-top:12px">
+        <div class="result-row"><span class="k">MCP Server</span><span class="v">python3 -m mcp_server.server</span></div>
+        <div class="result-row"><span class="k">MCP Register</span>
+          <span class="v" style="font-size:10px;font-family:monospace;word-break:break-all">claude mcp add ugsi-shop python3 -m mcp_server.server</span></div>
+        <div class="result-row"><span class="k">API Base</span><span class="v" style="font-family:monospace" id="setApiBase">—</span></div>
+        <div class="result-row"><span class="k">Docker</span><span class="v" id="setDocker">—</span></div>
+        <div style="margin-top:8px">
+          <button onclick="testMCPTools()" style="padding:8px 14px;background:var(--navy);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer">Test MCP Tools</button>
+          <button onclick="clearAllCache()" style="padding:8px 14px;background:#888;color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;margin-left:6px">Clear Cache</button>
+        </div>
+        <pre id="devLog" style="margin-top:8px;background:#1a1a2e;color:#0f0;padding:10px;border-radius:6px;font-size:11px;max-height:200px;overflow:auto;display:none"></pre>
+      </div>
+    </div>
+
+    <div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Write Operations</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="setWriteOps" onchange="toggleWriteOps()" style="width:18px;height:18px" checked>
+        Allow stock adjustments (add/remove from scan tab)
+      </label>
+    </div>
+
+    <div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Integrations</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px">Connect to existing systems. Each integration can push/pull data.</div>
+
+      <div class="card" style="margin:6px 0;background:var(--gray)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong style="font-size:13px">SharePoint / OneDrive</strong><br><span style="font-size:11px;color:#888">Auto-upload reports to shared folder</span></div>
+          <span class="card-badge badge-shop">Coming Soon</span>
+        </div>
+      </div>
+      <div class="card" style="margin:6px 0;background:var(--gray)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong style="font-size:13px">Email Alerts</strong><br><span style="font-size:11px;color:#888">Auto-email low stock reports to purchasing</span></div>
+          <span class="card-badge badge-shop">Coming Soon</span>
+        </div>
+      </div>
+      <div class="card" style="margin:6px 0;background:var(--gray)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong style="font-size:13px">CSV Import (Legacy Migration)</strong><br><span style="font-size:11px;color:#888">Watch a folder for CSV exports from old systems</span></div>
+          <span class="card-badge badge-shop">Coming Soon</span>
+        </div>
+      </div>
+      <div class="card" style="margin:6px 0;background:var(--gray)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong style="font-size:13px">ERP / Accounting Sync</strong><br><span style="font-size:11px;color:#888">Push stock changes to existing ERP system</span></div>
+          <span class="card-badge badge-shop">Coming Soon</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">About</div>
+      <div class="result-row"><span class="k">Version</span><span class="v">1.0.0</span></div>
+      <div class="result-row"><span class="k">Built For</span><span class="v">Underground Solutions</span></div>
+      <div class="result-row"><span class="k">Division</span><span class="v">Azuria Water Solutions</span></div>
+      <div class="result-row"><span class="k">MCP Protocol</span><span class="v">2024-11-05</span></div>
+      <div style="margin-top:8px;font-size:11px;color:#888">
+        MCP (Model Context Protocol) allows AI assistants like Claude to query
+        this inventory system directly. IT can register the MCP server to enable
+        natural language queries across the entire parts catalog and fleet.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TAB BAR ============ -->
+<div class="tab-bar">
+  <button class="active" onclick="showTab('scan',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    Scan
+  </button>
+  <button onclick="showTab('fleet',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/><circle cx="7" cy="15" r="1.5"/><circle cx="17" cy="15" r="1.5"/></svg>
+    Fleet
+  </button>
+  <button onclick="showTab('parts',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    Parts
+  </button>
+  <button onclick="showTab('report',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    Report
+  </button>
+  <button onclick="showTab('settings',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Settings
+  </button>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const BASE = location.origin;
+let AUTH = '';  // Set after token fetch
+
+// ============================================================
+// DATA STORES
+// ============================================================
+let allParts = [];
+let allCategories = {};
+let allLocations = {};
+let allStock = {};   // partPk -> [{location, quantity}]
+let scanner = null;
+let scannerActive = false;
+
+// ============================================================
+// LOCAL-FIRST CACHE KEYS
+// ============================================================
+const CACHE_KEY = 'ugsi_parts_cache';       // merged parts + stock + categories + locations
+const SYNC_TIME_KEY = 'ugsi_last_sync';     // epoch ms of last successful API sync
+const SYNC_INTERVAL = 4 * 60 * 60 * 1000;  // 4 hours before auto-refresh
+
+// Machine families for pre-populating fleet
+const FAMILIES = [
+  { family: '618', model: 'TracStar 618', count: 20, engine: 'Kubota D1105', prefix: 'UGSI-618' },
+  { family: '900', model: 'TracStar 900', count: 12, engine: 'Kubota V2403', prefix: 'UGSI-900' },
+  { family: '1200', model: 'TracStar 1200', count: 4, engine: 'Kubota V3307', prefix: 'UGSI-1200' },
+];
+
+// ============================================================
+// LOCAL STORAGE: Machines & Jobs
+// ============================================================
+function loadMachines() {
+  let m = localStorage.getItem('ugsi_machines');
+  if (m) return JSON.parse(m);
+  // First load: pre-populate from fleet template
+  let machines = {};
+  FAMILIES.forEach(f => {
+    for (let i = 1; i <= f.count; i++) {
+      const id = f.prefix + '-' + String(i).padStart(3, '0');
+      machines[id] = {
+        id, family: f.family, model: f.model, engine_type: f.engine,
+        serial: '', engine_serial: '', hours: '',
+        status: 'Shop', job: '', notes: ''
+      };
+    }
+  });
+  localStorage.setItem('ugsi_machines', JSON.stringify(machines));
+  return machines;
+}
+function saveMachines(m) { localStorage.setItem('ugsi_machines', JSON.stringify(m)); }
+
+function loadJobs() {
+  let j = localStorage.getItem('ugsi_jobs');
+  return j ? JSON.parse(j) : {};
+}
+function saveJobs(j) { localStorage.setItem('ugsi_jobs', JSON.stringify(j)); }
+
+// ============================================================
+// INVENTREE API
+// ============================================================
+async function getToken() {
+  // Get API token using basic auth, then use token for all subsequent requests
+  const basic = 'Basic ' + btoa('shopmanager:ugsi2026!');
+  const r = await fetch(BASE + '/api/user/token/', { headers: { 'Authorization': basic } });
+  if (!r.ok) throw new Error('Auth failed: ' + r.status);
+  const d = await r.json();
+  AUTH = 'Token ' + d.token;
+}
+
+async function api(endpoint, params = {}) {
+  const url = new URL(BASE + '/api/' + endpoint + '/');
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+  const r = await fetch(url, { headers: { 'Authorization': AUTH } });
+  if (!r.ok) throw new Error(r.status + '');
+  return r.json();
+}
+
+async function apiAll(endpoint) {
+  let results = [], offset = 0;
+  while (true) {
+    const d = await api(endpoint, { limit: 500, offset });
+    const items = d.results || (Array.isArray(d) ? d : []);
+    results.push(...items);
+    if (!d.next || items.length === 0) break;
+    offset += 500;
+  }
+  return results;
+}
+
+// ============================================================
+// LOCAL-FIRST INIT
+// ============================================================
+
+// Hydrate in-memory stores from a cache object
+function hydrateFromCache(cache) {
+  allParts = cache.parts;
+  allCategories = cache.categories;
+  allLocations = cache.locations;
+  allStock = cache.stock;
+}
+
+// Build the UI after data is loaded (from cache or API)
+function buildUI() {
+  // Populate category filter (reset first to avoid duplicates on re-sync)
+  const catSel = document.getElementById('partsCatFilter');
+  catSel.innerHTML = '<option value="">All Categories</option>';
+  const catCounts = {};
+  allParts.forEach(p => {
+    const cn = allCategories[p.category] || 'Other';
+    catCounts[cn] = (catCounts[cn] || 0) + 1;
+  });
+  Object.entries(catCounts).sort((a,b) => b[1]-a[1]).forEach(([name, count]) => {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + ' (' + count + ')';
+    catSel.appendChild(opt);
+  });
+
+  renderParts(allParts);
+  renderFleet();
+  renderReportStats();
+}
+
+// Fetch from InvenTree API and build merged cache
+async function fetchFromAPI() {
+  await getToken();
+  const [cats, locs, parts, stock] = await Promise.all([
+    apiAll('part/category'),
+    apiAll('stock/location'),
+    apiAll('part'),
+    apiAll('stock'),
+  ]);
+
+  const categories = {};
+  cats.forEach(c => { categories[c.pk] = c.name; });
+  const locations = {};
+  locs.forEach(l => { locations[l.pk] = l.name; });
+
+  // Merge stock into flat index
+  const stockIdx = {};
+  stock.forEach(s => {
+    if (!stockIdx[s.part]) stockIdx[s.part] = [];
+    stockIdx[s.part].push({
+      location: s.location ? (locations[s.location] || 'Unknown') : 'Unassigned',
+      quantity: s.quantity || 0,
+    });
+  });
+
+  return { parts, categories, locations, stock: stockIdx };
+}
+
+// Slim down parts to only the fields the app uses (~1.2 MB vs 7.2 MB full API response)
+function slimParts(parts) {
+  return parts.map(p => ({
+    pk: p.pk, name: p.name || '', IPN: p.IPN || '',
+    category: p.category, description: p.description || '',
+    notes: p.notes || '', minimum_stock: p.minimum_stock || 0,
+    in_stock: p.in_stock || 0, trackable: !!p.trackable,
+  }));
+}
+
+// Save cache to localStorage
+function saveCache(cache) {
+  try {
+    // Slim parts before saving to stay under 5MB localStorage limit
+    const slimmed = {
+      parts: slimParts(cache.parts),
+      categories: cache.categories,
+      locations: cache.locations,
+      stock: cache.stock,
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(slimmed));
+    localStorage.setItem(SYNC_TIME_KEY, Date.now().toString());
+  } catch (e) {
+    console.warn('Cache write failed (storage full?):', e);
+  }
+}
+
+// Load cache from localStorage
+function loadCache() {
+  const raw = localStorage.getItem(CACHE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+function cacheAge() {
+  const ts = localStorage.getItem(SYNC_TIME_KEY);
+  return ts ? Date.now() - parseInt(ts) : Infinity;
+}
+
+function formatCacheAge() {
+  const age = cacheAge();
+  if (age === Infinity) return 'never';
+  const mins = Math.floor(age / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  return Math.floor(hrs / 24) + 'd ago';
+}
+
+async function init() {
+  const status = document.getElementById('connStatus');
+
+  // 1. Try loading from cache for instant UI
+  const cache = loadCache();
+  if (cache && cache.parts && cache.parts.length > 0) {
+    hydrateFromCache(cache);
+    buildUI();
+    status.textContent = allParts.length.toLocaleString() + ' parts (cached ' + formatCacheAge() + ')';
+  }
+
+  // 2. If cache is stale or missing, sync from API in background
+  const needsSync = !cache || cacheAge() > SYNC_INTERVAL;
+  if (needsSync) {
+    const splashMsg = document.getElementById('splashMsg');
+    if (splashMsg && !cache) splashMsg.textContent = 'Syncing 6,000+ parts from InvenTree...';
+    syncFromAPI(!!cache);  // silent=true if we already have cached data showing
+  }
+
+  // 3. Always render fleet (fleet data is always in localStorage)
+  renderFleet();
+
+  // 4. Dismiss splash screen
+  dismissSplash(!!cache);
+}
+
+function dismissSplash(hasCache) {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  if (hasCache) {
+    // Cache loaded — dismiss quickly
+    setTimeout(() => { splash.classList.add('fade'); }, 600);
+    setTimeout(() => { splash.remove(); }, 1100);
+  } else {
+    // No cache — wait for first sync to complete, then dismiss
+    const check = setInterval(() => {
+      if (allParts.length > 0) {
+        clearInterval(check);
+        splash.classList.add('fade');
+        setTimeout(() => { splash.remove(); }, 500);
+      }
+    }, 500);
+    // Failsafe: dismiss after 2 minutes even if sync fails
+    setTimeout(() => { clearInterval(check); splash.classList.add('fade'); setTimeout(() => { splash.remove(); }, 500); }, 120000);
+  }
+}
+
+async function syncFromAPI(silent) {
+  const status = document.getElementById('connStatus');
+  if (!silent) status.textContent = 'Syncing...';
+  else status.textContent = allParts.length.toLocaleString() + ' parts (syncing...)';
+
+  try {
+    const freshCache = await fetchFromAPI();
+    saveCache(freshCache);
+    hydrateFromCache(freshCache);
+    buildUI();
+    status.textContent = allParts.length.toLocaleString() + ' parts (synced just now)';
+  } catch (e) {
+    console.warn('API sync failed:', e);
+    if (allParts.length > 0) {
+      // We have cached data — keep running offline
+      status.textContent = allParts.length.toLocaleString() + ' parts (offline, cached ' + formatCacheAge() + ')';
+    } else {
+      // No cache AND no API — show error
+      status.textContent = 'Offline';
+      document.getElementById('scanHint').innerHTML =
+        '<p style="color:#c00">Cannot reach InvenTree at ' + esc(BASE) + '</p>' +
+        '<p style="margin-top:8px;font-size:12px">Make sure Docker is running on the shop laptop</p>' +
+        '<p style="margin-top:4px;font-size:12px;color:#888">No cached data available — connect once to download parts catalog</p>';
+    }
+  }
+}
+
+// Manual sync — called from the Sync Now button
+async function syncNow() {
+  await syncFromAPI(false);
+}
+
+// ============================================================
+// TAB NAVIGATION
+// ============================================================
+function showTab(name, btn) {
+  document.querySelectorAll('.tab-bar button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else document.querySelector('.tab-bar button').classList.add('active');
+  document.getElementById(name + '-panel').classList.add('active');
+  if (name === 'settings') updateSettingsPanel();
+  if (scannerActive && name !== 'scan') toggleScanner();
+}
+
+// ============================================================
+// SCANNER
+// ============================================================
+function toggleScanner() {
+  const container = document.getElementById('scannerContainer');
+  if (scannerActive) {
+    if (scanner) scanner.stop().catch(() => {});
+    container.style.display = 'none';
+    scannerActive = false;
+    return;
+  }
+  container.style.display = 'block';
+  scannerActive = true;
+  scanner = new Html5Qrcode('reader');
+  scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 250 } },
+    (text) => {
+      document.getElementById('scanInput').value = text;
+      toggleScanner();
+      doLookup();
+    },
+    () => {}
+  ).catch(err => {
+    container.style.display = 'none';
+    scannerActive = false;
+    alert('Camera access requires HTTPS on non-localhost.\n\nOn shop WiFi, type the machine ID or part number manually.\n\nError: ' + err);
+  });
+}
+
+// ============================================================
+// LOOKUP (the main workflow)
+// ============================================================
+function doLookup() {
+  const raw = document.getElementById('scanInput').value.trim();
+  if (!raw) return;
+  const q = raw.toUpperCase();
+  const resultDiv = document.getElementById('scanResult');
+
+  // Try machine ID match (UGSI-618-001 pattern or partial)
+  const machines = loadMachines();
+  let machine = machines[q] || machines[raw];
+  if (!machine) {
+    // Fuzzy: try matching any machine whose ID contains the input
+    const match = Object.keys(machines).find(k => k.toUpperCase().includes(q));
+    if (match) machine = machines[match];
+  }
+
+  if (machine) {
+    renderMachineResult(machine, resultDiv);
+    return;
+  }
+
+  // Try part number match (IPN)
+  let part = allParts.find(p => (p.IPN || '').toUpperCase() === q);
+  if (!part) {
+    part = allParts.find(p => (p.IPN || '').toUpperCase().includes(q));
+  }
+  if (!part) {
+    // Try name match
+    const ql = raw.toLowerCase();
+    part = allParts.find(p => (p.name || '').toLowerCase().includes(ql));
+  }
+
+  if (part) {
+    renderPartResult(part, resultDiv);
+    return;
+  }
+
+  resultDiv.innerHTML = '<div class="empty"><p style="color:#c00">No match found for "' + esc(raw) + '"</p>' +
+    '<p style="margin-top:8px;font-size:12px;color:#888">Try a machine ID (UGSI-618-001) or McElroy part number</p></div>';
+}
+
+function renderMachineResult(machine, el) {
+  const jobs = loadJobs();
+  const job = machine.job ? jobs[machine.job] : null;
+  const family = machine.family;
+
+  // Find compatible parts
+  const compat = allParts.filter(p => {
+    const notes = (p.notes || '').toLowerCase();
+    const desc = (p.description || '').toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    return notes.includes(family) || name.includes(family) || desc.includes('/' + family) || desc.includes(family + '/');
+  });
+
+  // Group by category
+  const byCategory = {};
+  compat.forEach(p => {
+    const cat = allCategories[p.category] || 'Other';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(p);
+  });
+
+  let html = '<div class="scan-result">';
+  html += '<div class="scan-result-header">' + esc(machine.id) + ' - ' + esc(machine.model) + '</div>';
+  html += '<div class="scan-result-body">';
+  html += '<div class="result-row"><span class="k">Status</span><span class="v"><span class="card-badge badge-' +
+    (machine.status === 'Shop' ? 'shop' : machine.status === 'Field' ? 'field' : 'repair') + '">' +
+    esc(machine.status) + '</span></span></div>';
+  if (machine.serial)
+    html += '<div class="result-row"><span class="k">McElroy Serial</span><span class="v">' + esc(machine.serial) + '</span></div>';
+  html += '<div class="result-row"><span class="k">Engine</span><span class="v">' + esc(machine.engine_type) +
+    (machine.engine_serial ? ' (' + esc(machine.engine_serial) + ')' : '') + '</span></div>';
+  if (machine.hours)
+    html += '<div class="result-row"><span class="k">Engine Hours</span><span class="v">' + esc(machine.hours) + '</span></div>';
+
+  if (job) {
+    html += '<div class="job-info"><strong>' + esc(job.name) + '</strong>';
+    if (job.location) html += '<br>' + esc(job.location);
+    if (job.pipe) html += ' &mdash; ' + esc(job.pipe);
+    html += '</div>';
+  }
+
+  // Compatible parts with stock
+  html += '<div class="parts-for-machine">';
+  html += '<h4>Compatible Parts (' + compat.length + ' items for ' + family + '-class)</h4>';
+
+  Object.entries(byCategory).sort((a,b) => a[0].localeCompare(b[0])).forEach(([cat, parts]) => {
+    html += '<div style="font-size:11px;color:var(--green);font-weight:600;padding:6px 0 2px;border-top:1px solid #eee">' + esc(cat) + '</div>';
+    parts.forEach(p => {
+      const stock = getPartStock(p.pk);
+      const isLow = stock.total <= (p.minimum_stock || 0);
+      const pillClass = stock.total > 0 ? (isLow ? 'badge-low' : 'badge-ok') : 'badge-out';
+      const pillText = stock.total > 0 ? stock.total + ' in stock' : 'OUT';
+      html += '<div class="compat-part">' +
+        '<span>' + esc(p.name) + (p.IPN ? ' <span style="color:#888;font-family:monospace;font-size:10px">' + esc(p.IPN) + '</span>' : '') + '</span>' +
+        '<span class="stock-pill card-badge ' + pillClass + '">' + pillText + '</span>' +
+        '</div>';
+    });
+  });
+  html += '</div></div></div>';
+  el.innerHTML = html;
+}
+
+function renderPartResult(part, el) {
+  const cat = allCategories[part.category] || '';
+  const stock = getPartStock(part.pk);
+  const price = (part.description || '').match(/\$([\d,.]+)/);
+  const isLow = stock.total <= (part.minimum_stock || 0);
+
+  // Find which machines it fits
+  const notes = (part.notes || '').toLowerCase();
+  const desc = (part.description || '').toLowerCase();
+  const name = (part.name || '').toLowerCase();
+  const fits = [];
+  ['618', '900', '1200'].forEach(f => {
+    if (notes.includes(f) || name.includes(f) || desc.includes('/' + f) || desc.includes(f + '/'))
+      fits.push(f);
+  });
+
+  let html = '<div class="scan-result">';
+  html += '<div class="scan-result-header">' + esc(part.name) + '</div>';
+  html += '<div class="scan-result-body">';
+  if (part.IPN)
+    html += '<div class="result-row"><span class="k">Part #</span><span class="v" style="font-family:monospace">' + esc(part.IPN) + '</span></div>';
+  html += '<div class="result-row"><span class="k">Category</span><span class="v">' + esc(cat) + '</span></div>';
+  if (part.description)
+    html += '<div class="result-row"><span class="k">Description</span><span class="v" style="font-size:12px">' + esc(part.description) + '</span></div>';
+  if (fits.length > 0)
+    html += '<div class="result-row"><span class="k">Fits Machines</span><span class="v">' + fits.join(', ') + '-class</span></div>';
+  if (price)
+    html += '<div class="result-row"><span class="k">MIMECO Price</span><span class="v">$' + price[1] + '</span></div>';
+
+  // Stock details
+  html += '<div class="result-row"><span class="k">Total In Stock</span><span class="v"><span class="card-badge ' +
+    (stock.total > 0 ? (isLow ? 'badge-low' : 'badge-ok') : 'badge-out') + '">' +
+    (stock.total > 0 ? stock.total : 'OUT OF STOCK') + '</span></span></div>';
+
+  if (stock.items.length > 0) {
+    stock.items.forEach(s => {
+      html += '<div class="result-row"><span class="k" style="padding-left:12px">' + esc(s.location) + '</span><span class="v">' + s.quantity + '</span></div>';
+    });
+  }
+
+  html += '<div class="result-row"><span class="k">Reorder Point</span><span class="v">' + (part.minimum_stock || 0) + '</span></div>';
+
+  // Stock adjustment controls
+  const locOptions = Object.entries(allLocations).map(([pk, name]) =>
+    '<option value="' + pk + '">' + esc(name) + '</option>').join('');
+  html += '<div style="border-top:2px solid var(--green);margin-top:10px;padding-top:10px">';
+  html += '<div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px">Stock Adjustment</div>';
+  html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  html += '<select id="adjLocation" style="flex:1;min-width:120px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">' +
+    '<option value="">Select bin / location</option>' + locOptions + '</select>';
+  html += '<input id="adjQty" type="number" value="1" min="1" style="width:60px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;text-align:center">';
+  html += '</div>';
+  html += '<div style="display:flex;gap:6px;margin-top:8px">';
+  html += '<button onclick="adjustStock(' + part.pk + ',1)" style="flex:1;padding:10px;background:var(--green);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">+ Add Stock</button>';
+  html += '<button onclick="adjustStock(' + part.pk + ',-1)" style="flex:1;padding:10px;background:#888;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">- Remove</button>';
+  html += '</div>';
+  html += '<div id="adjStatus" style="font-size:12px;color:#888;text-align:center;margin-top:6px"></div>';
+  html += '</div>';
+
+  // MIMECO link
+  if (part.IPN) {
+    html += '<div style="text-align:center;padding:8px 0"><a href="https://www.mcelroyparts.com/search?q=' +
+      encodeURIComponent(part.IPN) + '" target="_blank" style="color:var(--green);font-size:13px">Order from MIMECO (mcelroyparts.com)</a></div>';
+  }
+
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+function getPartStock(pk) {
+  const items = allStock[pk] || [];
+  const total = items.reduce((s, i) => s + i.quantity, 0);
+  return { items, total };
+}
+
+// ============================================================
+// STOCK ADJUSTMENT (scan-to-shelf workflow)
+// ============================================================
+async function adjustStock(partPk, direction) {
+  const locSelect = document.getElementById('adjLocation');
+  const qtyInput = document.getElementById('adjQty');
+  const statusEl = document.getElementById('adjStatus');
+  const locPk = locSelect.value;
+  const qty = parseInt(qtyInput.value) || 1;
+
+  if (!locPk) {
+    statusEl.textContent = 'Select a bin / location first';
+    statusEl.style.color = '#c00';
+    locSelect.focus();
+    return;
+  }
+
+  if (!AUTH) {
+    try { await getToken(); } catch (e) {
+      statusEl.textContent = 'Cannot connect to InvenTree — stock changes require network';
+      statusEl.style.color = '#c00';
+      return;
+    }
+  }
+
+  statusEl.textContent = 'Updating...';
+  statusEl.style.color = '#888';
+
+  try {
+    if (direction > 0) {
+      // ADD: check if stock exists at this location
+      const existing = await api('stock', { part: partPk, location: locPk });
+      const items = existing.results || [];
+
+      if (items.length > 0) {
+        // Stock exists — PATCH the new absolute total
+        const stockPk = items[0].pk;
+        const newTotal = items[0].quantity + qty;
+        const r = await fetch(BASE + '/api/stock/' + stockPk + '/', {
+          method: 'PATCH',
+          headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ quantity: newTotal })
+        });
+        if (!r.ok) throw new Error('PATCH failed: ' + r.status);
+      } else {
+        // No stock at this location — POST a new record
+        const r = await fetch(BASE + '/api/stock/', {
+          method: 'POST',
+          headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ part: partPk, quantity: qty, location: parseInt(locPk) })
+        });
+        if (!r.ok) throw new Error('POST failed: ' + r.status);
+      }
+    } else {
+      // REMOVE: find stock item at location and reduce
+      const existing = await api('stock', { part: partPk, location: locPk });
+      const items = existing.results || [];
+
+      if (items.length === 0) {
+        statusEl.textContent = 'No stock at that location to remove';
+        statusEl.style.color = '#c00';
+        return;
+      }
+
+      const stockPk = items[0].pk;
+      const newTotal = Math.max(0, items[0].quantity - qty);
+      const r = await fetch(BASE + '/api/stock/' + stockPk + '/', {
+        method: 'PATCH',
+        headers: { 'Authorization': AUTH, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity: newTotal })
+      });
+      if (!r.ok) throw new Error('PATCH failed: ' + r.status);
+    }
+
+    // Success — reset input and show confirmation
+    statusEl.textContent = 'Stock updated successfully!';
+    statusEl.style.color = 'var(--green)';
+    qtyInput.value = 1;
+
+    // Sync from InvenTree so local cache matches server truth
+    await syncFromAPI(true);
+
+    // Re-render the part result with synced data
+    const updatedPart = allParts.find(p => p.pk === partPk);
+    if (updatedPart) {
+      renderPartResult(updatedPart, document.getElementById('scanResult'));
+    }
+
+  } catch (e) {
+    console.error('Stock adjustment failed:', e);
+    statusEl.textContent = 'Failed: ' + e.message + '. Try Sync Now.';
+    statusEl.style.color = '#c00';
+  }
+}
+
+// ============================================================
+// FLEET
+// ============================================================
+function renderFleet() {
+  const machines = loadMachines();
+  const jobs = loadJobs();
+  const el = document.getElementById('fleetList');
+  let html = '';
+
+  // Jobs summary at top
+  const jobList = Object.values(jobs).filter(j => j.status === 'Active');
+  if (jobList.length > 0) {
+    html += '<div class="section-hdr">Active Jobs</div>';
+    jobList.forEach(j => {
+      const assigned = Object.values(machines).filter(m => m.job === j.id);
+      html += '<div class="card" onclick="showEditJob(\'' + esc(j.id) + '\')">' +
+        '<div class="card-title">' + esc(j.name) + '</div>' +
+        '<div class="card-sub">' + esc(j.location || '') + (j.pipe ? ' - ' + esc(j.pipe) : '') + '</div>' +
+        '<div class="card-sub">' + assigned.length + ' machine' + (assigned.length !== 1 ? 's' : '') + ' assigned</div>' +
+        '</div>';
+    });
+  }
+
+  FAMILIES.forEach(f => {
+    const fam = Object.values(machines).filter(m => m.family === f.family);
+    html += '<div class="section-hdr">' + f.model + ' (' + fam.length + ')</div>';
+    fam.forEach(m => {
+      const job = m.job ? jobs[m.job] : null;
+      const badgeClass = m.status === 'Shop' ? 'badge-shop' : m.status === 'Field' ? 'badge-field' : 'badge-repair';
+      html += '<div class="card machine-card" onclick="showEditMachine(\'' + esc(m.id) + '\')">' +
+        '<div class="row">' +
+        '<div><div class="card-title">' + esc(m.id) + '</div>' +
+        (m.serial ? '<div class="card-sub">S/N: ' + esc(m.serial) + '</div>' : '') +
+        '</div>' +
+        '<span class="card-badge ' + badgeClass + '">' + esc(m.status) + '</span>' +
+        '</div>' +
+        (job ? '<div class="job-tag">' + esc(job.name) + (job.location ? ' - ' + esc(job.location) : '') + '</div>' : '') +
+        (m.hours ? '<div class="hours">' + esc(m.hours) + ' hrs</div>' : '') +
+        '</div>';
+    });
+  });
+  el.innerHTML = html;
+}
+
+function filterFleet() {
+  const q = document.getElementById('fleetSearch').value.toLowerCase();
+  const status = document.getElementById('fleetStatusFilter').value;
+  const machines = loadMachines();
+  const jobs = loadJobs();
+
+  const filtered = Object.values(machines).filter(m => {
+    if (q && !m.id.toLowerCase().includes(q) && !(m.serial || '').toLowerCase().includes(q)
+        && !(m.engine_serial || '').toLowerCase().includes(q)) return false;
+    if (status && m.status !== status) return false;
+    return true;
+  });
+
+  const el = document.getElementById('fleetList');
+  let html = '';
+  FAMILIES.forEach(f => {
+    const fam = filtered.filter(m => m.family === f.family);
+    if (fam.length === 0) return;
+    html += '<div class="section-hdr">' + f.model + ' (' + fam.length + ')</div>';
+    fam.forEach(m => {
+      const job = m.job ? jobs[m.job] : null;
+      const badgeClass = m.status === 'Shop' ? 'badge-shop' : m.status === 'Field' ? 'badge-field' : 'badge-repair';
+      html += '<div class="card machine-card" onclick="showEditMachine(\'' + esc(m.id) + '\')">' +
+        '<div class="row"><div><div class="card-title">' + esc(m.id) + '</div>' +
+        (m.serial ? '<div class="card-sub">S/N: ' + esc(m.serial) + '</div>' : '') +
+        '</div><span class="card-badge ' + badgeClass + '">' + esc(m.status) + '</span></div>' +
+        (job ? '<div class="job-tag">' + esc(job.name) + '</div>' : '') +
+        '</div>';
+    });
+  });
+  el.innerHTML = html || '<div class="empty">No machines match</div>';
+}
+
+// ============================================================
+// EDIT MACHINE MODAL
+// ============================================================
+function showEditMachine(id) {
+  const machines = loadMachines();
+  const m = machines[id];
+  if (!m) return;
+  const jobs = loadJobs();
+
+  let jobOpts = '<option value="">No job assigned</option>';
+  Object.values(jobs).filter(j => j.status === 'Active').forEach(j => {
+    jobOpts += '<option value="' + esc(j.id) + '"' + (m.job === j.id ? ' selected' : '') + '>' + esc(j.name) + '</option>';
+  });
+
+  document.getElementById('modalContent').innerHTML =
+    '<h2>' + esc(m.id) + '</h2>' +
+    '<div style="color:#888;font-size:13px">' + esc(m.model) + ' - ' + esc(m.engine_type) + '</div>' +
+    '<label>McElroy Serial #</label><input id="mSerial" value="' + esc(m.serial) + '" placeholder="From machine nameplate">' +
+    '<label>Kubota Engine Serial</label><input id="mEngine" value="' + esc(m.engine_serial) + '" placeholder="From engine plate">' +
+    '<label>Engine Hours</label><input id="mHours" type="number" value="' + esc(m.hours) + '" placeholder="Current reading">' +
+    '<label>Status</label><select id="mStatus">' +
+    ['Shop','Field','Needs Repair','Out of Service'].map(s =>
+      '<option' + (m.status===s?' selected':'') + '>' + s + '</option>'
+    ).join('') + '</select>' +
+    '<label>Assigned Job</label><select id="mJob">' + jobOpts + '</select>' +
+    '<label>Notes</label><input id="mNotes" value="' + esc(m.notes) + '">' +
+    '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')">Save</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888">Cancel</button>';
+  openModal();
+}
+
+function saveMachine(id) {
+  const machines = loadMachines();
+  machines[id].serial = document.getElementById('mSerial').value.trim();
+  machines[id].engine_serial = document.getElementById('mEngine').value.trim();
+  machines[id].hours = document.getElementById('mHours').value.trim();
+  machines[id].status = document.getElementById('mStatus').value;
+  machines[id].job = document.getElementById('mJob').value;
+  machines[id].notes = document.getElementById('mNotes').value.trim();
+  saveMachines(machines);
+  closeModal();
+  renderFleet();
+}
+
+// ============================================================
+// JOBS
+// ============================================================
+function showAddJob() {
+  document.getElementById('modalContent').innerHTML =
+    '<h2>New Job</h2>' +
+    '<label>Job Name</label><input id="jName" placeholder="e.g. Kinder Morgan 24 C905">' +
+    '<label>Location</label><input id="jLocation" placeholder="e.g. Tulsa, OK">' +
+    '<label>Pipe Spec</label><input id="jPipe" placeholder="e.g. 24 inch C-905">' +
+    '<label>Notes</label><input id="jNotes" placeholder="49,000 ft, 8 machines">' +
+    '<button class="save-btn" onclick="saveNewJob()">Create Job</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888">Cancel</button>';
+  openModal();
+}
+
+function saveNewJob() {
+  const name = document.getElementById('jName').value.trim();
+  if (!name) return;
+  const jobs = loadJobs();
+  const id = 'job-' + Date.now();
+  jobs[id] = {
+    id, name,
+    location: document.getElementById('jLocation').value.trim(),
+    pipe: document.getElementById('jPipe').value.trim(),
+    notes: document.getElementById('jNotes').value.trim(),
+    status: 'Active',
+    created: new Date().toISOString().split('T')[0],
+  };
+  saveJobs(jobs);
+  closeModal();
+  renderFleet();
+}
+
+function showEditJob(id) {
+  const jobs = loadJobs();
+  const j = jobs[id];
+  if (!j) return;
+  const machines = loadMachines();
+  const assigned = Object.values(machines).filter(m => m.job === id);
+
+  document.getElementById('modalContent').innerHTML =
+    '<h2>' + esc(j.name) + '</h2>' +
+    '<label>Job Name</label><input id="jeName" value="' + esc(j.name) + '">' +
+    '<label>Location</label><input id="jeLocation" value="' + esc(j.location) + '">' +
+    '<label>Pipe Spec</label><input id="jePipe" value="' + esc(j.pipe) + '">' +
+    '<label>Status</label><select id="jeStatus">' +
+    ['Active','Complete','Upcoming'].map(s => '<option' + (j.status===s?' selected':'') + '>' + s + '</option>').join('') +
+    '</select>' +
+    '<label>Notes</label><input id="jeNotes" value="' + esc(j.notes || '') + '">' +
+    '<div style="margin-top:12px;font-size:13px"><strong>Assigned Machines (' + assigned.length + '):</strong><br>' +
+    (assigned.length > 0 ? assigned.map(m => esc(m.id)).join(', ') : '<span style="color:#888">None yet - assign from machine cards</span>') +
+    '</div>' +
+    '<button class="save-btn" onclick="saveEditJob(\'' + esc(id) + '\')">Save</button>' +
+    '<button class="danger-btn" onclick="deleteJob(\'' + esc(id) + '\')">Delete Job</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888">Cancel</button>';
+  openModal();
+}
+
+function saveEditJob(id) {
+  const jobs = loadJobs();
+  jobs[id].name = document.getElementById('jeName').value.trim();
+  jobs[id].location = document.getElementById('jeLocation').value.trim();
+  jobs[id].pipe = document.getElementById('jePipe').value.trim();
+  jobs[id].status = document.getElementById('jeStatus').value;
+  jobs[id].notes = document.getElementById('jeNotes').value.trim();
+  saveJobs(jobs);
+  closeModal();
+  renderFleet();
+}
+
+function deleteJob(id) {
+  if (!confirm('Delete this job? Machines will be unassigned.')) return;
+  const jobs = loadJobs();
+  delete jobs[id];
+  saveJobs(jobs);
+  const machines = loadMachines();
+  Object.values(machines).forEach(m => { if (m.job === id) m.job = ''; });
+  saveMachines(machines);
+  closeModal();
+  renderFleet();
+}
+
+// ============================================================
+// PARTS LIST
+// ============================================================
+function renderParts(parts) {
+  const el = document.getElementById('partsList');
+  document.getElementById('partsCount').textContent = parts.length + ' shown';
+  if (parts.length > 500) parts = parts.slice(0, 500);
+
+  el.innerHTML = parts.map(p => {
+    const cat = allCategories[p.category] || '';
+    const stock = getPartStock(p.pk);
+    const isLow = stock.total > 0 && stock.total <= (p.minimum_stock || 0);
+    const price = (p.description || '').match(/\$([\d,.]+)/);
+    return '<div class="card" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')">' +
+      '<div class="part-row">' +
+      '<div class="part-info">' +
+      '<div class="part-name">' + esc(p.name) + '</div>' +
+      (p.IPN ? '<div class="part-sku">' + esc(p.IPN) + '</div>' : '') +
+      '<div class="part-cat">' + esc(cat) + '</div>' +
+      '</div>' +
+      '<div class="part-stock">' +
+      '<div class="qty" style="color:' + (stock.total > 0 ? (isLow ? '#E65100' : 'var(--green)') : '#B71C1C') + '">' +
+      stock.total + '</div>' +
+      (stock.items.length > 0 ? '<div class="loc">' + esc(stock.items[0].location) + '</div>' : '') +
+      (price ? '<div class="price">$' + price[1] + '</div>' : '') +
+      '</div></div></div>';
+  }).join('');
+}
+
+function filterParts() {
+  const q = document.getElementById('partsSearch').value.toLowerCase();
+  const cat = document.getElementById('partsCatFilter').value;
+  const machine = document.getElementById('partsMachineFilter').value;
+
+  const filtered = allParts.filter(p => {
+    if (q && !(p.name||'').toLowerCase().includes(q)
+        && !(p.IPN||'').toLowerCase().includes(q)
+        && !(p.description||'').toLowerCase().includes(q)) return false;
+    if (cat && (allCategories[p.category]||'') !== cat) return false;
+    if (machine) {
+      const notes = (p.notes||'').toLowerCase();
+      const desc = (p.description||'').toLowerCase();
+      const name = (p.name||'').toLowerCase();
+      if (!notes.includes(machine) && !name.includes(machine) && !desc.includes(machine)) return false;
+    }
+    return true;
+  });
+  renderParts(filtered);
+}
+
+function scanAndShow(val) {
+  document.getElementById('scanInput').value = val;
+  showTab('scan', document.querySelector('.tab-bar button'));
+  doLookup();
+}
+
+// ============================================================
+// REPORTS / EXPORT
+// ============================================================
+function renderReportStats() {
+  const machines = loadMachines();
+  const jobs = loadJobs();
+  const mList = Object.values(machines);
+  const inField = mList.filter(m => m.status === 'Field').length;
+  const inShop = mList.filter(m => m.status === 'Shop').length;
+  const needRepair = mList.filter(m => m.status === 'Needs Repair').length;
+  const activeJobs = Object.values(jobs).filter(j => j.status === 'Active').length;
+
+  let lowCount = 0;
+  allParts.forEach(p => {
+    const stock = getPartStock(p.pk);
+    if (stock.total <= (p.minimum_stock || 0) && (p.minimum_stock || 0) > 0) lowCount++;
+  });
+
+  document.getElementById('reportStats').innerHTML =
+    '<div class="stat-box"><div class="num">' + mList.length + '</div><div class="lbl">Total Machines</div></div>' +
+    '<div class="stat-box"><div class="num">' + inField + '</div><div class="lbl">In Field</div></div>' +
+    '<div class="stat-box"><div class="num">' + activeJobs + '</div><div class="lbl">Active Jobs</div></div>' +
+    '<div class="stat-box"><div class="num" style="color:' + (lowCount > 0 ? '#E65100' : 'var(--green)') + '">' + lowCount + '</div><div class="lbl">Low Stock Items</div></div>';
+
+  // Update sync status card
+  const syncEl = document.getElementById('syncStatus');
+  if (syncEl) {
+    const age = formatCacheAge();
+    const size = localStorage.getItem(CACHE_KEY) ? (localStorage.getItem(CACHE_KEY).length / 1024).toFixed(0) : '0';
+    syncEl.textContent = 'Last sync: ' + age + '. Cache: ' + size + ' KB / ~5,000 KB limit. ' + allParts.length + ' parts stored locally.';
+  }
+}
+
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// ============================================================
+// REPORT DATA GENERATORS
+// ============================================================
+function getReportData(type) {
+  if (type === 'inventory') {
+    const header = ['Part Name', 'SKU', 'Category', 'In Stock', 'Reorder Pt', 'Location', 'Price'];
+    const rows = allParts.map(p => {
+      const stock = getPartStock(p.pk);
+      const price = (p.description || '').match(/\$([\d,.]+)/);
+      return [p.name, p.IPN || '', allCategories[p.category] || '',
+        stock.total, p.minimum_stock || 0,
+        stock.items.map(s => s.location + '(' + s.quantity + ')').join('; '),
+        price ? '$' + price[1] : ''];
+    });
+    return { title: 'Inventory Snapshot', filename: 'UGSI_Inventory_' + today(), header, rows,
+      summary: [
+        { label: 'Total Parts', value: allParts.length, color: 'var(--navy)' },
+        { label: 'In Stock', value: allParts.filter(p => getPartStock(p.pk).total > 0).length, color: 'var(--navy)' },
+        { label: 'Out of Stock', value: allParts.filter(p => getPartStock(p.pk).total === 0).length, color: '#B71C1C' },
+      ]};
+  }
+  if (type === 'lowstock') {
+    const header = ['Part Name', 'SKU', 'Category', 'In Stock', 'Reorder Pt', 'Shortfall', 'Price'];
+    const rows = [];
+    allParts.forEach(p => {
+      const stock = getPartStock(p.pk);
+      const rp = p.minimum_stock || 0;
+      if (rp > 0 && stock.total <= rp) {
+        const price = (p.description || '').match(/\$([\d,.]+)/);
+        rows.push([p.name, p.IPN || '', allCategories[p.category] || '',
+          stock.total, rp, rp - stock.total, price ? '$' + price[1] : '']);
+      }
+    });
+    return { title: 'Low Stock Alert', filename: 'UGSI_Low_Stock_' + today(), header, rows,
+      summary: [
+        { label: 'Items Below Reorder', value: rows.length, color: rows.length > 0 ? '#E65100' : 'var(--navy)' },
+        { label: 'Total Shortfall', value: rows.reduce((s,r) => s + (r[5]||0), 0), color: '#B71C1C' },
+      ]};
+  }
+  if (type === 'fleet') {
+    const machines = loadMachines();
+    const jobs = loadJobs();
+    const header = ['Machine ID', 'Model', 'Serial', 'Engine', 'Hours', 'Status', 'Job', 'Location'];
+    const rows = Object.values(machines).map(m => {
+      const j = m.job ? jobs[m.job] : null;
+      return [m.id, m.model, m.serial, m.engine_type, m.hours || '',
+        m.status, j ? j.name : '', j ? j.location : ''];
+    });
+    const mList = Object.values(machines);
+    return { title: 'Fleet Status', filename: 'UGSI_Fleet_' + today(), header, rows,
+      summary: [
+        { label: 'Total Machines', value: mList.length, color: 'var(--navy)' },
+        { label: 'In Field', value: mList.filter(m => m.status === 'Field').length, color: 'var(--accent)' },
+        { label: 'In Shop', value: mList.filter(m => m.status === 'Shop').length, color: 'var(--navy)' },
+        { label: 'Needs Repair', value: mList.filter(m => m.status === 'Needs Repair').length, color: '#B71C1C' },
+      ]};
+  }
+  // jobs
+  const jobs = loadJobs();
+  const machines = loadMachines();
+  const header = ['Job Name', 'Location', 'Pipe Spec', 'Status', 'Machines', 'Machine IDs', 'Created'];
+  const rows = Object.values(jobs).map(j => {
+    const assigned = Object.values(machines).filter(m => m.job === j.id);
+    return [j.name, j.location, j.pipe, j.status, assigned.length,
+      assigned.map(m => m.id).join('; '), j.created || ''];
+  });
+  return { title: 'Job Summary', filename: 'UGSI_Jobs_' + today(), header, rows,
+    summary: [
+      { label: 'Active Jobs', value: Object.values(jobs).filter(j => j.status === 'Active').length, color: 'var(--navy)' },
+      { label: 'Total Jobs', value: Object.values(jobs).length, color: 'var(--blue-mid)' },
+    ]};
+}
+
+// ============================================================
+// INTERACTIVE REPORT VIEWER
+// ============================================================
+function showInteractiveReport(type) {
+  const data = getReportData(type);
+  if (data.rows.length === 0 && type !== 'inventory') {
+    alert('No data for this report yet.');
+    return;
+  }
+
+  let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+  html += '<h2 style="font-size:16px">' + esc(data.title) + '</h2>';
+  html += '<span style="font-size:12px;color:#888">' + today() + '</span></div>';
+
+  // Summary pills
+  html += '<div class="report-summary">';
+  data.summary.forEach(s => {
+    html += '<span class="pill" style="background:' + s.color + '1a;color:' + s.color + '">' +
+      s.value + ' ' + esc(s.label) + '</span>';
+  });
+  html += '</div>';
+
+  // Action buttons
+  html += '<div class="report-actions">';
+  html += '<button class="dl-btn" onclick="downloadReport(\'' + type + '\')">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+    'Download CSV</button>';
+  html += '<button class="email-btn" onclick="emailReport(\'' + type + '\')">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>' +
+    'Email</button>';
+  if (navigator.share) {
+    html += '<button class="share-btn" onclick="shareReport(\'' + type + '\')">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>' +
+      'Share</button>';
+  }
+  html += '<button class="copy-btn" onclick="copyReport(\'' + type + '\')">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
+    'Copy</button>';
+  html += '</div>';
+
+  // Interactive table (show first 100 rows, scroll for more)
+  const showRows = data.rows.slice(0, 100);
+  html += '<div style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:8px">';
+  html += '<table class="report-table"><thead><tr>';
+  data.header.forEach(h => { html += '<th>' + esc(h) + '</th>'; });
+  html += '</tr></thead><tbody>';
+  showRows.forEach(row => {
+    html += '<tr>';
+    row.forEach((cell, i) => {
+      let style = '';
+      // Color-code stock/status columns
+      if (data.header[i] === 'In Stock' || data.header[i] === 'Shortfall') {
+        const v = parseInt(cell) || 0;
+        style = ' style="font-weight:600;color:' + (v > 0 ? (data.header[i] === 'Shortfall' ? '#E65100' : 'var(--navy)') : '#B71C1C') + '"';
+      }
+      if (data.header[i] === 'Status') {
+        const colors = { Shop: 'var(--navy)', Field: 'var(--accent)', Active: 'var(--navy)', 'Needs Repair': '#B71C1C' };
+        style = ' style="font-weight:600;color:' + (colors[cell] || '#333') + '"';
+      }
+      html += '<td' + style + '>' + esc(cell) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  if (data.rows.length > 100)
+    html += '<div style="text-align:center;font-size:12px;color:#888;margin-top:6px">Showing 100 of ' + data.rows.length + ' rows. Download CSV for full report.</div>';
+
+  html += '<button class="close-btn" onclick="closeReportModal()" style="background:#888">Close</button>';
+  document.getElementById('reportModalContent').innerHTML = html;
+  document.getElementById('reportModalBg').classList.add('open');
+}
+
+function closeReportModal() { document.getElementById('reportModalBg').classList.remove('open'); }
+
+// ============================================================
+// REPORT ACTIONS: Download, Email, Share, Copy
+// ============================================================
+function makeCSV(data) {
+  return [data.header.join(',')].concat(
+    data.rows.map(r => r.map(cell => '"' + String(cell || '').replace(/"/g, '""') + '"').join(','))
+  ).join('\n');
+}
+
+function downloadReport(type) {
+  const data = getReportData(type);
+  const csv = makeCSV(data);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = data.filename + '.csv';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function emailReport(type) {
+  const data = getReportData(type);
+  const subject = encodeURIComponent('UGSI ' + data.title + ' - ' + today());
+  // Build a plain-text table for the email body
+  let body = data.title + ' — ' + today() + '\n';
+  body += 'Generated by UGSI McElroy Shop\n\n';
+  data.summary.forEach(s => { body += s.label + ': ' + s.value + '\n'; });
+  body += '\n' + data.header.join(' | ') + '\n';
+  body += data.header.map(() => '---').join(' | ') + '\n';
+  // Limit to 50 rows in email body (email has size limits)
+  data.rows.slice(0, 50).forEach(r => {
+    body += r.map(c => String(c || '')).join(' | ') + '\n';
+  });
+  if (data.rows.length > 50) body += '\n... and ' + (data.rows.length - 50) + ' more rows. Download CSV for full report.\n';
+  body += '\n---\nUGSI McElroy Shop — Underground Solutions Division';
+  window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(body);
+}
+
+async function shareReport(type) {
+  const data = getReportData(type);
+  const csv = makeCSV(data);
+  const file = new File([csv], data.filename + '.csv', { type: 'text/csv' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ title: 'UGSI ' + data.title, files: [file] });
+    } else {
+      // Fallback: share text summary
+      let text = data.title + ' — ' + today() + '\n';
+      data.summary.forEach(s => { text += s.label + ': ' + s.value + '\n'; });
+      await navigator.share({ title: 'UGSI ' + data.title, text });
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') alert('Share failed: ' + e.message);
+  }
+}
+
+function copyReport(type) {
+  const data = getReportData(type);
+  let text = data.title + ' — ' + today() + '\n\n';
+  data.summary.forEach(s => { text += s.label + ': ' + s.value + '\n'; });
+  text += '\n' + data.header.join('\t') + '\n';
+  data.rows.forEach(r => { text += r.map(c => String(c || '')).join('\t') + '\n'; });
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    if (btn) { const orig = btn.innerHTML; btn.innerHTML = 'Copied!'; setTimeout(() => { btn.innerHTML = orig; }, 2000); }
+  }).catch(() => { alert('Copy failed — try Download CSV instead'); });
+}
+
+// ============================================================
+// SETTINGS / CONTROL PANEL
+// ============================================================
+function updateSettingsPanel() {
+  const setServer = document.getElementById('setServer');
+  if (!setServer) return;
+  setServer.textContent = BASE;
+  document.getElementById('setApiBase').textContent = BASE + '/api/';
+  document.getElementById('setPartsCount').textContent = allParts.length.toLocaleString();
+  document.getElementById('setCacheAge').textContent = formatCacheAge();
+  document.getElementById('setConnStatus').innerHTML = AUTH
+    ? '<span class="card-badge badge-ok">Connected</span>'
+    : '<span class="card-badge badge-low">Not synced</span>';
+  document.getElementById('setDocker').textContent = 'Caddy proxy on port 8080';
+
+  // Restore dev mode state
+  const devMode = localStorage.getItem('ugsi_dev_mode') === 'true';
+  document.getElementById('setDevMode').checked = devMode;
+  document.getElementById('devModePanel').style.display = devMode ? 'block' : 'none';
+
+  const writeOps = localStorage.getItem('ugsi_write_ops') !== 'false';
+  document.getElementById('setWriteOps').checked = writeOps;
+}
+
+function toggleDevMode() {
+  const on = document.getElementById('setDevMode').checked;
+  localStorage.setItem('ugsi_dev_mode', on);
+  document.getElementById('devModePanel').style.display = on ? 'block' : 'none';
+  if (on) devLog('Dev mode enabled. MCP server tools available.');
+}
+
+function toggleWriteOps() {
+  const on = document.getElementById('setWriteOps').checked;
+  localStorage.setItem('ugsi_write_ops', on);
+  devLog('Write operations ' + (on ? 'enabled' : 'disabled'));
+}
+
+function devLog(msg) {
+  const el = document.getElementById('devLog');
+  if (!el) return;
+  el.style.display = 'block';
+  const ts = new Date().toLocaleTimeString();
+  el.textContent += '[' + ts + '] ' + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function testMCPTools() {
+  devLog('Testing MCP tool connectivity...');
+  try {
+    await getToken();
+    devLog('Auth: OK (token acquired)');
+
+    const cats = await api('part/category', { limit: 5 });
+    devLog('Categories API: OK (' + (cats.results || []).length + ' returned)');
+
+    const parts = await api('part', { limit: 5 });
+    devLog('Parts API: OK (' + (parts.results || []).length + ' returned)');
+
+    const stock = await api('stock', { limit: 5 });
+    devLog('Stock API: OK (' + (stock.results || []).length + ' returned)');
+
+    const locs = await api('stock/location', { limit: 5 });
+    devLog('Locations API: OK (' + (locs.results || []).length + ' returned)');
+
+    devLog('All MCP tool endpoints operational.');
+    devLog('Register MCP: claude mcp add ugsi-shop python3 -m mcp_server.server');
+  } catch (e) {
+    devLog('ERROR: ' + e.message);
+  }
+}
+
+function clearAllCache() {
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(SYNC_TIME_KEY);
+  devLog('Cache cleared. Next sync will pull fresh data.');
+  updateSettingsPanel();
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function openModal() { document.getElementById('modalBg').classList.add('open'); }
+function closeModal() { document.getElementById('modalBg').classList.remove('open'); }
+
+// ============================================================
+// UTILS
+// ============================================================
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+// ============================================================
+// GO
+// ============================================================
+init();
+</script>
+</body>
+</html>

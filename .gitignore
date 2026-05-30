@@ -1,0 +1,46 @@
+# Secrets
+.env
+*.secret
+config/settings.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker data (volumes are external)
+inventree-data/
+inventree-db-data/
+
+# Test artifacts
+test_screenshots/
+*.output
+
+# Scraped data (large, regeneratable)
+scraped_data/
+csv/
+
+# Excel workbooks (contain data, not code)
+*.xlsx
+
+# Standalone build artifacts (regeneratable)
+dist/
+UGSI_McElroy_Shop.zip
+
+# Claude Code
+.claude/

@@ -1,0 +1,18 @@
+:80 {
+    handle /shop/* {
+        uri strip_prefix /shop
+        root * /srv/shop
+        file_server
+    }
+    handle /static/* {
+        root * /home/inventree/data
+        file_server
+    }
+    handle /media/* {
+        root * /home/inventree/data
+        file_server
+    }
+    handle {
+        reverse_proxy inventree-server:8000
+    }
+}

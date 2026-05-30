@@ -1,0 +1,10 @@
+{
+  "name": "UGSI McElroy Shop",
+  "short_name": "UGSI Parts",
+  "description": "McElroy parts inventory and fleet management for Underground Solutions",
+  "start_url": "/shop/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#1A3761",
+  "icons": []
+}

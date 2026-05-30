@@ -1,0 +1,96 @@
+version: "3.8"
+
+# McElroy Parts Inventory - Underground Solutions
+# InvenTree Docker Deployment for shop laptop
+
+services:
+  inventree-db:
+    image: postgres:15
+    container_name: inventree-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inventree
+      POSTGRES_USER: inventree
+      POSTGRES_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+    volumes:
+      - inventree-db-data:/var/lib/postgresql/data
+    networks:
+      - inventree-net
+
+  inventree-cache:
+    image: redis:7
+    container_name: inventree-cache
+    restart: unless-stopped
+    networks:
+      - inventree-net
+
+  inventree-server:
+    image: inventree/inventree:stable
+    container_name: inventree-server
+    restart: unless-stopped
+    depends_on:
+      - inventree-db
+      - inventree-cache
+    environment:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_HOST: inventree-db
+      INVENTREE_DB_PORT: 5432
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+      INVENTREE_CACHE_HOST: inventree-cache
+      INVENTREE_CACHE_PORT: 6379
+      INVENTREE_ADMIN_USER: ${INVENTREE_ADMIN_USER:-shopmanager}
+      INVENTREE_ADMIN_PASSWORD: ${INVENTREE_ADMIN_PASSWORD:-ugsi2026!}
+      INVENTREE_ADMIN_EMAIL: ${INVENTREE_ADMIN_EMAIL:-shop@undergroundsolutions.com}
+      INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8080}
+      INVENTREE_PLUGINS_ENABLED: "true"
+    volumes:
+      - inventree-data:/home/inventree/data
+    networks:
+      - inventree-net
+
+  inventree-worker:
+    image: inventree/inventree:stable
+    container_name: inventree-worker
+    restart: unless-stopped
+    command: invoke worker
+    depends_on:
+      - inventree-server
+    environment:
+      INVENTREE_DB_ENGINE: postgresql
+      INVENTREE_DB_HOST: inventree-db
+      INVENTREE_DB_PORT: 5432
+      INVENTREE_DB_NAME: inventree
+      INVENTREE_DB_USER: inventree
+      INVENTREE_DB_PASSWORD: ${INVENTREE_DB_PASSWORD:-ugsi_shop_2026}
+      INVENTREE_CACHE_HOST: inventree-cache
+      INVENTREE_CACHE_PORT: 6379
+      INVENTREE_SITE_URL: ${INVENTREE_SITE_URL:-http://localhost:8080}
+      INVENTREE_PLUGINS_ENABLED: "true"
+    volumes:
+      - inventree-data:/home/inventree/data
+    networks:
+      - inventree-net
+
+  inventree-proxy:
+    image: caddy:2
+    container_name: inventree-proxy
+    restart: unless-stopped
+    depends_on:
+      - inventree-server
+    ports:
+      - "${INVENTREE_PORT:-8080}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./shop:/srv/shop:ro
+    networks:
+      - inventree-net
+
+volumes:
+  inventree-db-data:
+  inventree-data:
+
+networks:
+  inventree-net:
+    driver: bridge
