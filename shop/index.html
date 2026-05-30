@@ -586,6 +586,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
 // ============================================================
 const BASE = location.origin;
 let AUTH = '';  // Set after token fetch
+let BACKEND = 'none';  // 'inventree', 'lite', or 'none'
 
 // ============================================================
 // DATA STORES
@@ -612,12 +613,12 @@ const FAMILIES = [
 ];
 
 // ============================================================
-// FLEET DATA — Server-authoritative via InvenTree API
-// Machines are serial-tracked stock items. Status = stock location.
-// Jobs are stored in localStorage (local to this device for now).
+// FLEET DATA — Server-authoritative
+// Supports two backends: InvenTree (full) or Lite (Python+SQLite)
+// Falls back to localStorage if no server is reachable.
 // ============================================================
-let allMachines = {};  // Loaded from InvenTree
-let fleetLocations = {};  // Fleet location pk -> name mapping
+let allMachines = {};
+let fleetLocations = {};  // InvenTree fleet location pk -> name mapping
 
 function loadMachines() { return allMachines; }
 function saveMachines(m) { allMachines = m; }
@@ -715,6 +716,7 @@ async function syncFleetFromAPI() {
 }
 
 async function saveMachineToServer(id) {
+  if (BACKEND === 'lite') return saveMachineToLite(id);
   const m = allMachines[id];
   if (!m || !m.stock_pk || !AUTH) return;
 
@@ -757,6 +759,75 @@ async function saveMachineToServer(id) {
   } catch(e) {
     console.error('Failed to save machine to server:', e);
   }
+}
+
+// ============================================================
+// LITE SERVER API (Python + SQLite — no Docker needed)
+// ============================================================
+async function syncFleetFromLite() {
+  try {
+    const r = await fetch(BASE + '/api/fleet');
+    if (!r.ok) return false;
+    const machines = await r.json();
+    allMachines = {};
+    for (const [id, m] of Object.entries(machines)) {
+      allMachines[id] = { ...m, id };
+    }
+    localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
+    return true;
+  } catch(e) {
+    console.warn('Lite fleet sync failed:', e);
+    return false;
+  }
+}
+
+async function saveMachineToLite(id) {
+  const m = allMachines[id];
+  if (!m) return;
+  try {
+    await fetch(BASE + '/api/fleet/' + encodeURIComponent(id), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serial: m.serial || '',
+        engine_serial: m.engine_serial || '',
+        hours: m.hours || '',
+        status: m.status || 'Shop',
+        job: m.job || '',
+        location: m.location || '',
+        notes: m.notes || '',
+      }),
+    });
+    localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
+  } catch(e) {
+    console.error('Failed to save to lite server:', e);
+  }
+}
+
+async function fetchPartsFromLite() {
+  try {
+    const r = await fetch(BASE + '/api/parts');
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function detectBackend() {
+  // Try lite server first (simpler, no auth needed)
+  try {
+    const r = await fetch(BASE + '/api/health', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.server === 'ugsi-lite') { BACKEND = 'lite'; return 'lite'; }
+    }
+  } catch(e) {}
+  // Try InvenTree
+  try {
+    const r = await fetch(BASE + '/api/', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) { BACKEND = 'inventree'; return 'inventree'; }
+  } catch(e) {}
+  BACKEND = 'none';
+  return 'none';
 }
 
 // ============================================================
@@ -940,6 +1011,10 @@ function formatCacheAge() {
 async function init() {
   const status = document.getElementById('connStatus');
 
+  // 0. Detect which backend is available
+  const backend = await detectBackend();
+  console.log('Backend:', backend);
+
   // 1. Try loading from cache for instant UI
   const cache = loadCache();
   if (cache && cache.parts && cache.parts.length > 0) {
@@ -948,25 +1023,62 @@ async function init() {
     status.textContent = allParts.length.toLocaleString() + ' parts (cached ' + formatCacheAge() + ')';
   }
 
-  // 2. If cache is stale or missing, sync from API in background
-  const needsSync = !cache || cacheAge() > SYNC_INTERVAL;
-  if (needsSync) {
-    const splashMsg = document.getElementById('splashMsg');
-    if (splashMsg && !cache) splashMsg.textContent = 'Syncing 6,000+ parts from InvenTree...';
-    syncFromAPI(!!cache);  // silent=true if we already have cached data showing
+  // 2. Load parts data
+  if (backend === 'lite') {
+    // Lite server: load parts from /api/parts
+    const needsSync = !cache || cacheAge() > SYNC_INTERVAL;
+    if (needsSync) {
+      const splashMsg = document.getElementById('splashMsg');
+      if (splashMsg && !cache) splashMsg.textContent = 'Loading parts...';
+      const freshData = await fetchPartsFromLite();
+      if (freshData && freshData.parts) {
+        saveCache(freshData);
+        hydrateFromCache(freshData);
+        buildUI();
+        status.textContent = allParts.length.toLocaleString() + ' parts (synced just now)';
+      }
+    }
+  } else if (backend === 'inventree') {
+    // InvenTree: full API sync
+    const needsSync = !cache || cacheAge() > SYNC_INTERVAL;
+    if (needsSync) {
+      const splashMsg = document.getElementById('splashMsg');
+      if (splashMsg && !cache) splashMsg.textContent = 'Syncing 6,000+ parts from InvenTree...';
+      syncFromAPI(!!cache);
+    }
   }
 
   // 3. Load fleet from server (or cache)
-  // Ensure we have auth before fleet sync (getToken may not have run yet
-  // if syncFromAPI was fire-and-forget above)
-  if (!AUTH) {
-    try { await getToken(); } catch(e) { console.warn('Auth failed for fleet sync:', e); }
+  if (backend === 'lite') {
+    await syncFleetFromLite();
+  } else if (backend === 'inventree') {
+    if (!AUTH) {
+      try { await getToken(); } catch(e) { console.warn('Auth failed for fleet sync:', e); }
+    }
+    await syncFleetFromAPI();
   }
-  await syncFleetFromAPI();
+  // If no backend, fleet stays from cache/template (loaded in syncFleetFromAPI fallback)
+  if (backend === 'none') {
+    const cached = localStorage.getItem('ugsi_machines_cache');
+    if (cached) allMachines = JSON.parse(cached);
+    if (Object.keys(allMachines).length === 0) {
+      FAMILIES.forEach(f => {
+        for (let i = 1; i <= f.count; i++) {
+          const id = f.prefix + '-' + String(i).padStart(3, '0');
+          allMachines[id] = {
+            id, family: f.family, model: f.model, engine_type: f.engine,
+            serial: '', engine_serial: '', hours: '',
+            status: 'Shop', job: '', location: '', notes: ''
+          };
+        }
+      });
+    }
+    if (!cache) status.textContent = 'Offline — no server found';
+  }
   renderFleet();
 
   // 4. Dismiss splash screen
-  dismissSplash(!!cache);
+  dismissSplash(!!cache || backend !== 'none');
 }
 
 function dismissSplash(hasCache) {
