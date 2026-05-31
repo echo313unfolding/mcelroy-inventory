@@ -276,7 +276,7 @@ def main():
     init_db()
 
     # Start server
-    server = http.server.HTTPServer(("0.0.0.0", port), ShopHandler)
+    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), ShopHandler)
     print(f"\n  Shop app: http://localhost:{port}/shop/")
 
     # Show local IP for iPhone access

@@ -1079,6 +1079,17 @@ async function init() {
 
   // 4. Dismiss splash screen
   dismissSplash(!!cache || backend !== 'none');
+
+  // 5. Poll fleet every 30s so other devices see changes without refresh
+  if (backend !== 'none') {
+    setInterval(async () => {
+      if (backend === 'lite') await syncFleetFromLite();
+      else if (backend === 'inventree') await syncFleetFromAPI();
+      // Only re-render if fleet tab is visible
+      const fleetPanel = document.getElementById('fleet-panel');
+      if (fleetPanel && fleetPanel.style.display !== 'none') renderFleet();
+    }, 30000);
+  }
 }
 
 function dismissSplash(hasCache) {
