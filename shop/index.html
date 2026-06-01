@@ -423,6 +423,16 @@ header .sub { font-size: 11px; opacity: 0.7; }
   <div id="partsList"></div>
 </div>
 
+<!-- ============ BINS PANEL ============ -->
+<div id="bins-panel" class="panel">
+  <div class="search-bar">
+    <input type="search" id="binsSearch" placeholder="Search bins..." oninput="renderBinsTab()">
+    <button onclick="showAddBinModal()" style="padding:8px 12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">+ Assign Bin</button>
+    <button onclick="printBinLabels()" style="padding:8px 12px;background:var(--green);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">Print Labels</button>
+  </div>
+  <div id="binsList"></div>
+</div>
+
 <!-- ============ REPORT PANEL ============ -->
 <div id="report-panel" class="panel">
   <div class="stats-row" id="reportStats"></div>
@@ -447,10 +457,20 @@ header .sub { font-size: 11px; opacity: 0.7; }
     <h3>Sync Now</h3>
     <p id="syncStatus">Force refresh from InvenTree. Last sync: checking...</p>
   </div>
+  <div class="section-hdr" style="margin-top:8px">Backup &amp; Export</div>
+  <div class="report-card" onclick="exportBackup()">
+    <h3>Export Backup</h3>
+    <p>Download fleet + bins data as a JSON file. Save this to a USB drive.</p>
+  </div>
+  <div class="report-card" onclick="importBackup()">
+    <h3>Import Backup</h3>
+    <p>Restore fleet + bins from a backup file.</p>
+  </div>
+  <input type="file" id="backupFileInput" accept=".json" style="display:none" onchange="handleBackupImport(event)">
+
   <div style="padding:12px 14px;font-size:12px;color:#888">
-    Tap any report to preview, then download CSV, email, or share.<br>
-    Parts catalog is cached locally. Works offline after first sync.<br>
-    Auto-refreshes every 4 hours when connected.
+    Tap any report to preview, then download CSV.<br>
+    Data is stored locally in SQLite. Export a backup regularly.
   </div>
 </div>
 
@@ -542,7 +562,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
 
     <div>
       <div style="font-weight:600;font-size:14px;margin-bottom:8px">About</div>
-      <div class="result-row"><span class="k">Version</span><span class="v">1.0.0</span></div>
+      <div class="result-row"><span class="k">Version</span><span class="v">0.1.0</span></div>
       <div class="result-row"><span class="k">Built For</span><span class="v">Underground Solutions</span></div>
       <div class="result-row"><span class="k">Division</span><span class="v">Azuria Water Solutions</span></div>
       <div class="result-row"><span class="k">MCP Protocol</span><span class="v">2024-11-05</span></div>
@@ -569,6 +589,10 @@ header .sub { font-size: 11px; opacity: 0.7; }
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
     Parts
   </button>
+  <button onclick="showTab('bins',this)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v3"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="9.5" y1="13.5" x2="14.5" y2="13.5"/></svg>
+    Bins
+  </button>
   <button onclick="showTab('report',this)">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
     Report
@@ -579,7 +603,8 @@ header .sub { font-size: 11px; opacity: 0.7; }
   </button>
 </div>
 
-<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="vendor/html5-qrcode.min.js"></script>
+<script src="vendor/qrcode.js"></script>
 <script>
 // ============================================================
 // CONFIG
@@ -619,6 +644,7 @@ const FAMILIES = [
 // ============================================================
 let allMachines = {};
 let fleetLocations = {};  // InvenTree fleet location pk -> name mapping
+let partBins = {};  // part_pk -> {bin, stock_qty, notes}
 
 function loadMachines() { return allMachines; }
 function saveMachines(m) { allMachines = m; }
@@ -796,6 +822,7 @@ async function saveMachineToLite(id) {
         job: m.job || '',
         location: m.location || '',
         notes: m.notes || '',
+        qr_code: m.qr_code || '',
       }),
     });
     localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
@@ -810,6 +837,33 @@ async function fetchPartsFromLite() {
     if (!r.ok) return null;
     return await r.json();
   } catch(e) { return null; }
+}
+
+async function syncBins() {
+  if (BACKEND !== 'lite') return;
+  try {
+    const r = await fetch(BASE + '/api/bins');
+    if (r.ok) {
+      partBins = await r.json();
+      localStorage.setItem('ugsi_bins_cache', JSON.stringify(partBins));
+    }
+  } catch(e) {
+    const cached = localStorage.getItem('ugsi_bins_cache');
+    if (cached) partBins = JSON.parse(cached);
+  }
+}
+
+async function saveBin(partPk, bin, stockQty, notes, qrCode) {
+  if (BACKEND !== 'lite') return;
+  partBins[partPk] = { part_pk: parseInt(partPk), bin, stock_qty: stockQty, notes, qr_code: qrCode || '' };
+  localStorage.setItem('ugsi_bins_cache', JSON.stringify(partBins));
+  try {
+    await fetch(BASE + '/api/bins/' + partPk, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bin, stock_qty: stockQty, notes, qr_code: qrCode || '' }),
+    });
+  } catch(e) { console.error('Failed to save bin:', e); }
 }
 
 async function detectBackend() {
@@ -1075,7 +1129,9 @@ async function init() {
     }
     if (!cache) status.textContent = 'Offline — no server found';
   }
+  await syncBins();
   renderFleet();
+  renderReportStats();  // Re-render now that fleet is loaded
 
   // 4. Dismiss splash screen
   dismissSplash(!!cache || backend !== 'none');
@@ -1085,9 +1141,8 @@ async function init() {
     setInterval(async () => {
       if (backend === 'lite') await syncFleetFromLite();
       else if (backend === 'inventree') await syncFleetFromAPI();
-      // Only re-render if fleet tab is visible
-      const fleetPanel = document.getElementById('fleet-panel');
-      if (fleetPanel && fleetPanel.style.display !== 'none') renderFleet();
+      renderFleet();
+      renderReportStats();
     }, 30000);
   }
 }
@@ -1156,6 +1211,7 @@ function showTab(name, btn) {
   else document.querySelector('.tab-bar button').classList.add('active');
   document.getElementById(name + '-panel').classList.add('active');
   if (name === 'settings') updateSettingsPanel();
+  if (name === 'bins') renderBinsTab();
   if (scannerActive && name !== 'scan') toggleScanner();
 }
 
@@ -1198,9 +1254,11 @@ function doLookup() {
   const q = raw.toUpperCase();
   const resultDiv = document.getElementById('scanResult');
 
-  // Try machine ID match (UGSI-618-001 pattern or partial)
+  // Try machine QR code match first (custom qr_code field)
   const machines = loadMachines();
-  let machine = machines[q] || machines[raw];
+  let machine = Object.values(machines).find(m => (m.qr_code || '').toUpperCase() === q);
+  // Then try machine ID match (UGSI-618-001 pattern or partial)
+  if (!machine) machine = machines[q] || machines[raw];
   if (!machine) {
     // Fuzzy: try matching any machine whose ID contains the input
     const match = Object.keys(machines).find(k => k.toUpperCase().includes(q));
@@ -1212,8 +1270,13 @@ function doLookup() {
     return;
   }
 
-  // Try part number match (IPN)
-  let part = allParts.find(p => (p.IPN || '').toUpperCase() === q);
+  // Try part custom QR code match first
+  let part = allParts.find(p => {
+    const bd = partBins[p.pk] || {};
+    return bd.qr_code && bd.qr_code.toUpperCase() === q;
+  });
+  // Then try part number match (IPN)
+  if (!part) part = allParts.find(p => (p.IPN || '').toUpperCase() === q);
   if (!part) {
     part = allParts.find(p => (p.IPN || '').toUpperCase().includes(q));
   }
@@ -1228,8 +1291,18 @@ function doLookup() {
     return;
   }
 
+  // Try bin label match (e.g., "A1", "B2")
+  const binParts = allParts.filter(p => {
+    const b = partBins[p.pk]?.bin || '';
+    return b && b.toUpperCase() === q;
+  });
+  if (binParts.length > 0) {
+    renderBinResult(q, binParts, resultDiv);
+    return;
+  }
+
   resultDiv.innerHTML = '<div class="empty"><p style="color:#c00">No match found for "' + esc(raw) + '"</p>' +
-    '<p style="margin-top:8px;font-size:12px;color:#888">Try a machine ID (UGSI-618-001) or McElroy part number</p></div>';
+    '<p style="margin-top:8px;font-size:12px;color:#888">Try a machine ID (UGSI-618-001), part number, or bin label (A1)</p></div>';
 }
 
 function renderMachineResult(machine, el) {
@@ -1253,8 +1326,11 @@ function renderMachineResult(machine, el) {
     byCategory[cat].push(p);
   });
 
+  const machineQR = getMachineQR(machine);
   let html = '<div class="scan-result">';
-  html += '<div class="scan-result-header">' + esc(machine.id) + ' - ' + esc(machine.model) + '</div>';
+  html += '<div class="scan-result-header">' + esc(machine.id) + ' - ' + esc(machine.model) +
+    '<button onclick="printSingleLabel(\'' + esc(machineQR) + '\',\'' + esc(machine.model) + '\',\'machine\')" style="float:right;padding:4px 10px;background:white;color:var(--green);border:1px solid white;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Print Label</button>' +
+    '</div>';
   html += '<div class="scan-result-body">';
   html += '<div class="result-row"><span class="k">Status</span><span class="v"><span class="card-badge badge-' +
     (machine.status === 'Shop' ? 'shop' : machine.status === 'Field' ? 'field' : 'repair') + '">' +
@@ -1284,14 +1360,117 @@ function renderMachineResult(machine, el) {
       const isLow = stock.total <= (p.minimum_stock || 0);
       const pillClass = stock.total > 0 ? (isLow ? 'badge-low' : 'badge-ok') : 'badge-out';
       const pillText = stock.total > 0 ? stock.total + ' in stock' : 'OUT';
-      html += '<div class="compat-part">' +
-        '<span>' + esc(p.name) + (p.IPN ? ' <span style="color:#888;font-family:monospace;font-size:10px">' + esc(p.IPN) + '</span>' : '') + '</span>' +
+      const pBin = partBins[p.pk]?.bin || '';
+      html += '<div class="compat-part" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')" style="cursor:pointer">' +
+        '<span>' + esc(p.name) + (p.IPN ? ' <span style="color:#888;font-family:monospace;font-size:10px">' + esc(p.IPN) + '</span>' : '') +
+        (pBin ? ' <span style="color:var(--accent);font-weight:600;font-size:10px">Bin ' + esc(pBin) + '</span>' : '') + '</span>' +
         '<span class="stock-pill card-badge ' + pillClass + '">' + pillText + '</span>' +
         '</div>';
     });
   });
-  html += '</div></div></div>';
+  // Pull Parts button
+  if (compat.length > 0) {
+    html += '<div style="border-top:2px solid var(--accent);padding-top:10px;margin-top:8px">';
+    html += '<button onclick="showPullParts(\'' + esc(machine.id) + '\')" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Pull Parts for This Machine</button>';
+    html += '</div>';
+  }
+
+  html += '</div></div>';
   el.innerHTML = html;
+}
+
+// ============================================================
+// PULL PARTS WORKFLOW
+// ============================================================
+function showPullParts(machineId) {
+  const machine = allMachines[machineId];
+  if (!machine) return;
+  const family = machine.family;
+
+  // Find compatible parts that have stock in bins
+  const compat = allParts.filter(p => {
+    const notes = (p.notes || '').toLowerCase();
+    const desc = (p.description || '').toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    return notes.includes(family) || name.includes(family) || desc.includes('/' + family) || desc.includes(family + '/');
+  }).filter(p => {
+    const bd = partBins[p.pk] || {};
+    return bd.bin && (bd.stock_qty || 0) > 0;
+  });
+
+  if (compat.length === 0) {
+    alert('No binned parts with stock found for ' + family + '-class machines.\n\nAssign parts to bins first from the Parts or Scan tab.');
+    return;
+  }
+
+  let html = '<h2 style="font-size:18px;text-align:center;margin-bottom:4px">Pull Parts</h2>' +
+    '<div style="text-align:center;color:#888;font-size:13px;margin-bottom:12px">' + esc(machineId) + ' — ' + esc(machine.model) + '</div>';
+
+  html += '<div style="max-height:50vh;overflow-y:auto">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+  html += '<thead><tr style="background:var(--navy);color:white;text-align:left">' +
+    '<th style="padding:8px">Part</th><th style="padding:8px">Bin</th><th style="padding:8px;text-align:right">On Hand</th><th style="padding:8px;text-align:center;width:70px">Pull</th></tr></thead><tbody>';
+
+  compat.forEach(p => {
+    const bd = partBins[p.pk] || {};
+    const cat = allCategories[p.category] || '';
+    html += '<tr style="border-bottom:1px solid #eee">' +
+      '<td style="padding:8px"><div style="font-weight:600;font-size:13px">' + esc(p.name) + '</div>' +
+      (p.IPN ? '<div style="font-family:monospace;font-size:11px;color:#888">' + esc(p.IPN) + '</div>' : '') +
+      '<div style="font-size:10px;color:#666">' + esc(cat) + '</div></td>' +
+      '<td style="padding:8px;font-weight:700;color:var(--accent)">' + esc(bd.bin) + '</td>' +
+      '<td style="padding:8px;text-align:right;font-weight:600">' + (bd.stock_qty || 0) + '</td>' +
+      '<td style="padding:8px;text-align:center"><input type="number" data-pk="' + p.pk + '" class="pull-qty" value="0" min="0" max="' + (bd.stock_qty || 0) + '" style="width:55px;padding:6px;border:2px solid var(--border);border-radius:6px;text-align:center;font-size:14px;font-weight:600"></td>' +
+      '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+
+  html += '<div id="pullStatus" style="font-size:12px;color:#888;text-align:center;margin-top:8px"></div>';
+  html += '<button class="save-btn" onclick="confirmPull(\'' + esc(machineId) + '\')" style="font-size:16px;padding:14px;background:var(--accent)">Confirm Pull</button>';
+  html += '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
+
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function confirmPull(machineId) {
+  const inputs = document.querySelectorAll('.pull-qty');
+  const pulls = [];
+  inputs.forEach(inp => {
+    const qty = parseInt(inp.value) || 0;
+    if (qty > 0) {
+      pulls.push({ pk: inp.dataset.pk, qty });
+    }
+  });
+
+  if (pulls.length === 0) {
+    document.getElementById('pullStatus').textContent = 'Enter pull quantities for at least one part.';
+    document.getElementById('pullStatus').style.color = '#c00';
+    return;
+  }
+
+  const statusEl = document.getElementById('pullStatus');
+  statusEl.textContent = 'Pulling ' + pulls.length + ' item(s)...';
+  statusEl.style.color = '#888';
+
+  let pulled = 0;
+  for (const p of pulls) {
+    const bd = partBins[p.pk] || {};
+    const newQty = Math.max(0, (bd.stock_qty || 0) - p.qty);
+    await saveBin(p.pk, bd.bin || '', newQty, bd.notes || '', bd.qr_code || '');
+    pulled++;
+  }
+
+  statusEl.textContent = 'Pulled ' + pulled + ' item(s) for ' + machineId + '.';
+  statusEl.style.color = 'var(--green)';
+
+  // Refresh the scan result behind the modal
+  setTimeout(() => {
+    closeModal();
+    const machine = allMachines[machineId];
+    if (machine) renderMachineResult(machine, document.getElementById('scanResult'));
+  }, 1200);
 }
 
 function renderPartResult(part, el) {
@@ -1310,8 +1489,12 @@ function renderPartResult(part, el) {
       fits.push(f);
   });
 
+  const qrText = getPartQR(part);
+
   let html = '<div class="scan-result">';
-  html += '<div class="scan-result-header">' + esc(part.name) + '</div>';
+  html += '<div class="scan-result-header">' + esc(part.name) +
+    '<button onclick="printSingleLabel(\'' + esc(qrText) + '\',\'' + esc(part.name) + '\',\'part\')" style="float:right;padding:4px 10px;background:white;color:var(--green);border:1px solid white;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600">Print Label</button>' +
+    '</div>';
   html += '<div class="scan-result-body">';
   if (part.IPN)
     html += '<div class="result-row"><span class="k">Part #</span><span class="v" style="font-family:monospace">' + esc(part.IPN) + '</span></div>';
@@ -1351,6 +1534,23 @@ function renderPartResult(part, el) {
   html += '<button onclick="adjustStock(' + part.pk + ',-1)" style="flex:1;padding:10px;background:#888;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">- Remove</button>';
   html += '</div>';
   html += '<div id="adjStatus" style="font-size:12px;color:#888;text-align:center;margin-top:6px"></div>';
+  html += '</div>';
+
+  // Bin location — editable inline
+  const binData = partBins[part.pk] || {};
+  const curBin = binData.bin || '';
+  const curBinNotes = binData.notes || '';
+  html += '<div style="border-top:2px solid var(--accent);margin-top:10px;padding-top:10px">';
+  html += '<div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:8px">Bin Location</div>';
+  html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">';
+  html += '<input id="binLabel" value="' + esc(curBin) + '" placeholder="e.g. A1, B3, SHELF-2" style="flex:1;min-width:80px;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-weight:600;text-transform:uppercase;text-align:center">';
+  html += '<input id="binQty" type="number" value="' + (binData.stock_qty || 0) + '" min="0" placeholder="Qty" style="width:70px;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;text-align:center">';
+  html += '</div>';
+  html += '<input id="binNotes" value="' + esc(curBinNotes) + '" placeholder="Notes (optional)" style="width:100%;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box">';
+  const curQR = binData.qr_code || '';
+  html += '<input id="binQRCode" value="' + esc(curQR) + '" placeholder="Custom QR code (default: ' + esc(part.IPN || part.name) + ')" style="width:100%;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;box-sizing:border-box;font-family:monospace">';
+  html += '<button onclick="saveBinFromPart(' + part.pk + ')" style="width:100%;margin-top:8px;padding:12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Save Bin</button>';
+  html += '<div id="binStatus" style="font-size:12px;color:#888;text-align:center;margin-top:4px"></div>';
   html += '</div>';
 
   // MIMECO link
@@ -1462,6 +1662,339 @@ async function adjustStock(partPk, direction) {
     statusEl.textContent = 'Failed: ' + e.message + '. Try Sync Now.';
     statusEl.style.color = '#c00';
   }
+}
+
+// ============================================================
+// BIN MANAGEMENT
+// ============================================================
+async function saveBinFromPart(partPk) {
+  const binLabel = (document.getElementById('binLabel').value || '').trim().toUpperCase();
+  const binQty = parseFloat(document.getElementById('binQty').value) || 0;
+  const binNotes = (document.getElementById('binNotes').value || '').trim();
+  const binQRCode = (document.getElementById('binQRCode').value || '').trim();
+  const statusEl = document.getElementById('binStatus');
+
+  await saveBin(partPk, binLabel, binQty, binNotes, binQRCode);
+  statusEl.textContent = binLabel ? 'Saved — Bin ' + binLabel : 'Bin cleared';
+  statusEl.style.color = 'var(--green)';
+  setTimeout(() => { statusEl.textContent = ''; }, 3000);
+}
+
+function renderBinResult(binLabel, parts, el) {
+  let html = '<div class="scan-result">';
+  html += '<div class="scan-result-header" style="background:var(--accent)">Bin ' + esc(binLabel) + '</div>';
+  html += '<div class="scan-result-body">';
+  html += '<div class="result-row"><span class="k">Parts in this bin</span><span class="v"><strong>' + parts.length + '</strong></span></div>';
+
+  parts.forEach(p => {
+    const cat = allCategories[p.category] || '';
+    const bd = partBins[p.pk] || {};
+    const stock = getPartStock(p.pk);
+    html += '<div style="border-top:1px solid #eee;padding:10px 0;cursor:pointer" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div>';
+    html += '<div style="font-weight:600;font-size:14px">' + esc(p.name) + '</div>';
+    if (p.IPN) html += '<div style="font-family:monospace;font-size:12px;color:#888">' + esc(p.IPN) + '</div>';
+    html += '<div style="font-size:11px;color:#666">' + esc(cat) + '</div>';
+    html += '</div>';
+    html += '<div style="text-align:right">';
+    if (bd.stock_qty > 0) html += '<div style="font-size:16px;font-weight:700;color:var(--green)">' + bd.stock_qty + '</div>';
+    html += '<div style="font-size:11px;color:#888">' + (stock.total > 0 ? stock.total + ' in stock' : 'no stock') + '</div>';
+    html += '</div>';
+    html += '</div>';
+    if (bd.notes) html += '<div style="font-size:11px;color:#666;margin-top:2px">' + esc(bd.notes) + '</div>';
+    html += '</div>';
+  });
+
+  html += '<div style="border-top:2px solid var(--accent);padding-top:10px;margin-top:6px;text-align:center">';
+  html += '<div style="font-size:12px;color:#888">Tap any part to view details or edit its bin</div>';
+  html += '</div>';
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+// ============================================================
+// BINS TAB
+// ============================================================
+function renderBinsTab() {
+  const el = document.getElementById('binsList');
+  const q = (document.getElementById('binsSearch')?.value || '').toLowerCase();
+
+  // Group parts by bin label
+  const binGroups = {};
+  allParts.forEach(p => {
+    const bd = partBins[p.pk];
+    if (!bd || !bd.bin) return;
+    const bin = bd.bin.toUpperCase();
+    if (q && !bin.toLowerCase().includes(q)) return;
+    if (!binGroups[bin]) binGroups[bin] = { parts: [], totalQty: 0, notes: [] };
+    binGroups[bin].parts.push(p);
+    binGroups[bin].totalQty += (bd.stock_qty || 0);
+    if (bd.notes && !binGroups[bin].notes.includes(bd.notes)) binGroups[bin].notes.push(bd.notes);
+  });
+
+  const bins = Object.keys(binGroups).sort();
+  if (bins.length === 0) {
+    el.innerHTML = '<div class="empty"><p>No bins assigned yet.</p>' +
+      '<p style="font-size:13px;color:#888;margin-top:8px">Scan or search a part, then set its bin location.<br>Or tap <strong>+ Assign Bin</strong> above.</p></div>';
+    return;
+  }
+
+  let html = '';
+  bins.forEach(bin => {
+    const g = binGroups[bin];
+    html += '<div class="card" onclick="showBinDetail(\'' + esc(bin) + '\')" style="cursor:pointer">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+      '<div>' +
+      '<div style="font-size:18px;font-weight:700;color:var(--accent)">' + esc(bin) + '</div>' +
+      '<div style="font-size:13px;color:#666">' + g.parts.length + ' part' + (g.parts.length !== 1 ? 's' : '') +
+      (g.notes.length > 0 ? ' &middot; ' + esc(g.notes[0]) : '') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+      '<div style="font-size:20px;font-weight:700;color:var(--green)">' + g.totalQty + '</div>' +
+      '<div style="font-size:11px;color:#888">total qty</div>' +
+      '</div></div></div>';
+  });
+  el.innerHTML = html;
+}
+
+function showBinDetail(binLabel) {
+  const parts = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === binLabel.toUpperCase());
+  document.getElementById('scanInput').value = binLabel;
+  showTab('scan', document.querySelector('.tab-bar button'));
+  renderBinResult(binLabel, parts, document.getElementById('scanResult'));
+}
+
+function showAddBinModal() {
+  let partOpts = '<option value="">Select a part...</option>';
+  allParts.slice(0, 200).forEach(p => {
+    partOpts += '<option value="' + p.pk + '">' + esc((p.IPN || '') + ' — ' + p.name) + '</option>';
+  });
+
+  document.getElementById('modalContent').innerHTML =
+    '<h2 style="font-size:18px;text-align:center;margin-bottom:12px">Assign Part to Bin</h2>' +
+    '<div class="edit-field">' +
+      '<label>Search Part</label>' +
+      '<input id="addBinPartSearch" placeholder="Type part name or number..." oninput="filterAddBinParts()">' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Part</label>' +
+      '<select id="addBinPartPk" style="max-height:200px">' + partOpts + '</select>' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Bin Label</label>' +
+      '<input id="addBinLabel" placeholder="e.g. A1, B3, SHELF-2" style="text-transform:uppercase;font-size:18px;font-weight:700;text-align:center">' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+      '<div class="edit-field"><label>Quantity</label><input id="addBinQty" type="number" value="0" min="0"></div>' +
+      '<div class="edit-field"><label>Notes</label><input id="addBinNotes" placeholder="optional"></div>' +
+    '</div>' +
+    '<button class="save-btn" onclick="saveAddBin()" style="font-size:16px;padding:14px">Save Bin Assignment</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
+  openModal();
+}
+
+function filterAddBinParts() {
+  const q = (document.getElementById('addBinPartSearch').value || '').toLowerCase();
+  const sel = document.getElementById('addBinPartPk');
+  const matches = allParts.filter(p =>
+    (p.name||'').toLowerCase().includes(q) || (p.IPN||'').toLowerCase().includes(q)
+  ).slice(0, 100);
+  sel.innerHTML = '<option value="">Select a part...</option>' +
+    matches.map(p => '<option value="' + p.pk + '">' + esc((p.IPN || '') + ' — ' + p.name) + '</option>').join('');
+}
+
+async function saveAddBin() {
+  const pk = document.getElementById('addBinPartPk').value;
+  const bin = (document.getElementById('addBinLabel').value || '').trim().toUpperCase();
+  const qty = parseFloat(document.getElementById('addBinQty').value) || 0;
+  const notes = (document.getElementById('addBinNotes').value || '').trim();
+  if (!pk || !bin) { alert('Select a part and enter a bin label.'); return; }
+  await saveBin(pk, bin, qty, notes, '');
+  closeModal();
+  renderBinsTab();
+}
+
+// ============================================================
+// QR PAYLOAD HELPERS
+// ============================================================
+function getPartQR(part) {
+  const bd = partBins[part.pk] || {};
+  return bd.qr_code || part.IPN || part.name;
+}
+function getMachineQR(machine) {
+  return machine.qr_code || machine.id;
+}
+function getBinQR(binLabel) {
+  // Check if any part in this bin has a custom qr_code for the bin
+  // For bins, the QR is just the bin label unless overridden
+  return binLabel;
+}
+
+// ============================================================
+// QR / LABEL PRINTING
+// ============================================================
+function makeQR(text) {
+  // Generate QR code SVG string using qrcode-generator
+  const qr = qrcode(0, 'M');
+  qr.addData(text);
+  qr.make();
+  return qr.createSvgTag(3, 2);
+}
+
+function printSingleLabel(qrText, title, type) {
+  const qrSvg = makeQR(qrText);
+  let html = '<!DOCTYPE html><html><head><title>Label: ' + esc(qrText) + '</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}' +
+    '.label{border:3px solid #333;border-radius:12px;padding:24px;text-align:center;width:280px}' +
+    '.label .big{font-size:' + (type === 'machine' ? '24' : '32') + 'px;font-weight:900;letter-spacing:2px}' +
+    '.label .sub{font-size:13px;color:#666;margin-top:6px}' +
+    '.label .qr{margin:12px auto}' +
+    '.label .qr svg{width:180px;height:180px}' +
+    '.no-print{text-align:center;margin-bottom:20px}' +
+    '@media print{.no-print{display:none}}' +
+    '</style></head><body><div>' +
+    '<div class="no-print">' +
+    '<button onclick="window.print()" style="padding:12px 32px;font-size:16px;background:#E8792B;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700">Print</button>' +
+    ' <button onclick="window.close()" style="padding:12px 32px;font-size:16px;background:#888;color:white;border:none;border-radius:8px;cursor:pointer">Close</button></div>' +
+    '<div class="label">' +
+    '<div class="big">' + esc(qrText) + '</div>' +
+    '<div class="sub">' + esc(title) + '</div>' +
+    '<div class="qr">' + qrSvg + '</div>' +
+    '<div class="sub">UGSI McElroy Shop</div></div></div></body></html>';
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+function printBinLabels() {
+  const binGroups = {};
+  allParts.forEach(p => {
+    const bd = partBins[p.pk];
+    if (!bd || !bd.bin) return;
+    const bin = bd.bin.toUpperCase();
+    if (!binGroups[bin]) binGroups[bin] = [];
+    binGroups[bin].push(p);
+  });
+
+  const bins = Object.keys(binGroups).sort();
+  if (bins.length === 0) { alert('No bins assigned yet.'); return; }
+
+  const machines = loadMachines();
+
+  let html = '<!DOCTYPE html><html><head><title>UGSI Shop Labels</title><style>' +
+    'body{font-family:Arial,sans-serif;margin:0;padding:10px}' +
+    '.label-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}' +
+    '.label{border:2px solid #333;border-radius:8px;padding:12px;text-align:center;page-break-inside:avoid}' +
+    '.label .big{font-size:36px;font-weight:900;letter-spacing:2px}' +
+    '.label .sub{font-size:11px;color:#666;margin-top:4px}' +
+    '.label .qr{margin:8px auto;display:flex;align-items:center;justify-content:center}' +
+    '.label .qr svg{width:120px;height:120px}' +
+    '.section{font-size:14px;font-weight:700;padding:12px 0 6px;border-bottom:2px solid #333;margin:16px 0 8px}' +
+    '@media print{.no-print{display:none}.label-grid{gap:4px}.label{border-width:1px}.label .qr svg{width:100px;height:100px}}' +
+    '</style></head><body>' +
+    '<div class="no-print" style="text-align:center;padding:10px">' +
+    '<button onclick="window.print()" style="padding:12px 32px;font-size:16px;background:#E8792B;color:white;border:none;border-radius:8px;cursor:pointer;font-weight:700">Print Labels</button>' +
+    ' <button onclick="window.close()" style="padding:12px 32px;font-size:16px;background:#888;color:white;border:none;border-radius:8px;cursor:pointer">Close</button></div>';
+
+  // Bin labels
+  html += '<div class="section">Bin Labels (' + bins.length + ')</div>';
+  html += '<div class="label-grid">';
+  bins.forEach(bin => {
+    const count = binGroups[bin].length;
+    html += '<div class="label">' +
+      '<div class="big">' + esc(bin) + '</div>' +
+      '<div class="sub">' + count + ' part' + (count !== 1 ? 's' : '') + '</div>' +
+      '<div class="qr">' + makeQR(bin) + '</div>' +
+      '<div class="sub">UGSI McElroy Shop</div></div>';
+  });
+  html += '</div>';
+
+  // Machine labels
+  html += '<div class="section">Machine Labels (' + Object.keys(machines).length + ')</div>';
+  html += '<div class="label-grid">';
+  Object.values(machines).forEach(m => {
+    const mQR = getMachineQR(m);
+    html += '<div class="label">' +
+      '<div class="big" style="font-size:20px">' + esc(m.id) + '</div>' +
+      '<div class="sub">' + esc(m.model) + '</div>' +
+      (m.serial ? '<div class="sub">S/N: ' + esc(m.serial) + '</div>' : '') +
+      '<div class="qr">' + makeQR(mQR) + '</div>' +
+      '<div class="sub">UGSI McElroy Shop</div></div>';
+  });
+  html += '</div>';
+
+  html += '</body></html>';
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
+// ============================================================
+// BACKUP / RESTORE
+// ============================================================
+function exportBackup() {
+  const machines = loadMachines();
+  const jobs = loadJobs();
+  const backup = {
+    version: 1,
+    exported: new Date().toISOString(),
+    machines: machines,
+    jobs: jobs,
+    bins: partBins,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'UGSI_Shop_Backup_' + today() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importBackup() {
+  document.getElementById('backupFileInput').click();
+}
+
+async function handleBackupImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    if (!backup.version || !backup.machines) {
+      alert('Invalid backup file.'); return;
+    }
+    // Restore machines
+    Object.entries(backup.machines).forEach(([id, m]) => {
+      allMachines[id] = m;
+      if (BACKEND === 'lite') saveMachineToLite(id);
+    });
+    localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
+
+    // Restore bins
+    if (backup.bins) {
+      Object.entries(backup.bins).forEach(([pk, bd]) => {
+        partBins[pk] = bd;
+        if (BACKEND === 'lite') saveBin(pk, bd.bin || '', bd.stock_qty || 0, bd.notes || '', bd.qr_code || '');
+      });
+      localStorage.setItem('ugsi_bins_cache', JSON.stringify(partBins));
+    }
+
+    // Restore jobs
+    if (backup.jobs) {
+      localStorage.setItem('ugsi_jobs', JSON.stringify(backup.jobs));
+    }
+
+    renderFleet();
+    renderReportStats();
+    alert('Backup restored! ' + Object.keys(backup.machines).length + ' machines, ' +
+      Object.keys(backup.bins || {}).length + ' bin assignments.');
+  } catch(e) {
+    alert('Failed to import: ' + e.message);
+  }
+  event.target.value = '';
 }
 
 // ============================================================
@@ -1617,6 +2150,10 @@ function showEditMachine(id) {
       '<label>Notes</label>' +
       '<input id="mNotes" value="' + esc(m.notes) + '" placeholder="Anything — oil change due, new carriage, etc.">' +
     '</div>' +
+    '<div class="edit-field">' +
+      '<label>Custom QR Code (default: ' + esc(m.id) + ')</label>' +
+      '<input id="mQRCode" value="' + esc(m.qr_code || '') + '" placeholder="Leave blank to use machine ID" style="font-family:monospace">' +
+    '</div>' +
 
     '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')" style="font-size:16px;padding:14px">Save Changes</button>' +
     '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
@@ -1645,6 +2182,7 @@ function saveMachine(id) {
   allMachines[id].job = document.getElementById('mJob').value;
   allMachines[id].location = document.getElementById('mLocation').value.trim();
   allMachines[id].notes = document.getElementById('mNotes').value.trim();
+  allMachines[id].qr_code = document.getElementById('mQRCode').value.trim();
   saveMachineToServer(id);  // Persist to InvenTree
   closeModal();
   renderFleet();
@@ -1744,19 +2282,21 @@ function renderParts(parts) {
     const cat = allCategories[p.category] || '';
     const stock = getPartStock(p.pk);
     const isLow = stock.total > 0 && stock.total <= (p.minimum_stock || 0);
-    const price = (p.description || '').match(/\$([\d,.]+)/);
+    const bin = partBins[p.pk]?.bin || '';
     return '<div class="card" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')">' +
       '<div class="part-row">' +
       '<div class="part-info">' +
       '<div class="part-name">' + esc(p.name) + '</div>' +
       (p.IPN ? '<div class="part-sku">' + esc(p.IPN) + '</div>' : '') +
-      '<div class="part-cat">' + esc(cat) + '</div>' +
+      '<div class="part-cat">' + esc(cat) +
+      (bin ? ' &middot; <strong style="color:var(--accent)">Bin ' + esc(bin) + '</strong>' : '') +
+      '</div>' +
       '</div>' +
       '<div class="part-stock">' +
       '<div class="qty" style="color:' + (stock.total > 0 ? (isLow ? '#E65100' : 'var(--green)') : '#B71C1C') + '">' +
       stock.total + '</div>' +
-      (stock.items.length > 0 ? '<div class="loc">' + esc(stock.items[0].location) + '</div>' : '') +
-      (price ? '<div class="price">$' + price[1] + '</div>' : '') +
+      (bin ? '<div class="loc" style="color:var(--accent);font-weight:600">' + esc(bin) + '</div>' :
+       stock.items.length > 0 ? '<div class="loc">' + esc(stock.items[0].location) + '</div>' : '') +
       '</div></div></div>';
   }).join('');
 }
@@ -1769,7 +2309,8 @@ function filterParts() {
   const filtered = allParts.filter(p => {
     if (q && !(p.name||'').toLowerCase().includes(q)
         && !(p.IPN||'').toLowerCase().includes(q)
-        && !(p.description||'').toLowerCase().includes(q)) return false;
+        && !(p.description||'').toLowerCase().includes(q)
+        && !((partBins[p.pk]?.bin||'').toLowerCase().includes(q))) return false;
     if (cat && (allCategories[p.category]||'') !== cat) return false;
     if (machine) {
       const notes = (p.notes||'').toLowerCase();
@@ -1797,7 +2338,7 @@ function renderReportStats() {
   const mList = Object.values(machines);
   const inField = mList.filter(m => m.status === 'Field').length;
   const inShop = mList.filter(m => m.status === 'Shop').length;
-  const needRepair = mList.filter(m => m.status === 'Needs Repair').length;
+  const needRepair = mList.filter(m => m.status === 'Repair' || m.status === 'Needs Repair').length;
   const activeJobs = Object.values(jobs).filter(j => j.status === 'Active').length;
 
   let lowCount = 0;

@@ -60,10 +60,28 @@ def init_db():
             status TEXT DEFAULT 'Shop',
             job TEXT DEFAULT '',
             location TEXT DEFAULT '',
-            notes TEXT DEFAULT ''
+            notes TEXT DEFAULT '',
+            qr_code TEXT DEFAULT ''
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS part_bins (
+            part_pk INTEGER PRIMARY KEY,
+            bin TEXT DEFAULT '',
+            stock_qty REAL DEFAULT 0,
+            notes TEXT DEFAULT '',
+            qr_code TEXT DEFAULT ''
         )
     """)
     db.commit()
+
+    # Migrate: add qr_code columns if missing (v0.1 upgrade)
+    for table, col in [("machines", "qr_code"), ("part_bins", "qr_code")]:
+        try:
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT DEFAULT ''")
+            db.commit()
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     # Seed machines if empty
     count = db.execute("SELECT COUNT(*) FROM machines").fetchone()[0]
@@ -112,6 +130,13 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/parts":
             return self._serve_file(os.path.join(SHOP_DIR, "parts_data.json"), "application/json")
 
+        if path == "/api/bins":
+            return self._get_bins()
+
+        if path.startswith("/api/bins/"):
+            part_pk = path[len("/api/bins/"):].rstrip("/")
+            return self._get_bin(part_pk)
+
         # Static files from shop/
         if path.startswith("/shop/"):
             rel = path[len("/shop/"):]
@@ -135,6 +160,13 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
             if body is None:
                 return
             return self._update_machine(machine_id, body)
+
+        if path.startswith("/api/bins/"):
+            part_pk = path[len("/api/bins/"):].rstrip("/")
+            body = self._read_body()
+            if body is None:
+                return
+            return self._update_bin(part_pk, body)
 
         self.send_error(404)
 
@@ -171,7 +203,7 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         # Update only provided fields
-        allowed = {"serial", "engine_serial", "hours", "status", "job", "location", "notes"}
+        allowed = {"serial", "engine_serial", "hours", "status", "job", "location", "notes", "qr_code"}
         updates = {k: v for k, v in data.items() if k in allowed}
         if updates:
             set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -180,6 +212,44 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
             db.commit()
 
         row = db.execute("SELECT * FROM machines WHERE id = ?", (machine_id,)).fetchone()
+        db.close()
+        self._json_response(dict(row))
+
+    # ---- Bin handlers ----
+
+    def _get_bins(self):
+        db = get_db()
+        rows = db.execute("SELECT * FROM part_bins").fetchall()
+        db.close()
+        bins = {str(row["part_pk"]): dict(row) for row in rows}
+        self._json_response(bins)
+
+    def _get_bin(self, part_pk):
+        db = get_db()
+        row = db.execute("SELECT * FROM part_bins WHERE part_pk = ?", (part_pk,)).fetchone()
+        db.close()
+        if row:
+            self._json_response(dict(row))
+        else:
+            self._json_response({"part_pk": int(part_pk), "bin": "", "stock_qty": 0, "notes": ""})
+
+    def _update_bin(self, part_pk, data):
+        db = get_db()
+        row = db.execute("SELECT * FROM part_bins WHERE part_pk = ?", (part_pk,)).fetchone()
+        if row:
+            allowed = {"bin", "stock_qty", "notes", "qr_code"}
+            updates = {k: v for k, v in data.items() if k in allowed}
+            if updates:
+                set_clause = ", ".join(f"{k} = ?" for k in updates)
+                values = list(updates.values()) + [part_pk]
+                db.execute(f"UPDATE part_bins SET {set_clause} WHERE part_pk = ?", values)
+        else:
+            db.execute(
+                "INSERT INTO part_bins (part_pk, bin, stock_qty, notes, qr_code) VALUES (?, ?, ?, ?, ?)",
+                (part_pk, data.get("bin", ""), data.get("stock_qty", 0), data.get("notes", ""), data.get("qr_code", "")),
+            )
+        db.commit()
+        row = db.execute("SELECT * FROM part_bins WHERE part_pk = ?", (part_pk,)).fetchone()
         db.close()
         self._json_response(dict(row))
 

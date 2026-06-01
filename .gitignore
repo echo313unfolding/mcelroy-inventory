@@ -42,5 +42,8 @@ csv/
 dist/
 UGSI_McElroy_Shop.zip
 
+# Runtime database (user data, not code)
+shop.db
+
 # Claude Code
 .claude/
