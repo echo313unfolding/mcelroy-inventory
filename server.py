@@ -323,7 +323,7 @@ def main():
             port = int(sys.argv[idx + 1])
 
     print("=" * 50)
-    print("  UGSI McElroy Shop — Server")
+    print("  Shop App — Server")
     print("=" * 50)
     print(f"  Database: {os.path.abspath(DB_PATH)}")
 

@@ -1,7 +1,7 @@
 {
-  "name": "UGSI McElroy Shop",
-  "short_name": "UGSI Parts",
-  "description": "McElroy parts inventory and fleet management for Underground Solutions",
+  "name": "Shop App",
+  "short_name": "Shop App",
+  "description": "Parts inventory and fleet management for Underground Solutions",
   "start_url": "/shop/",
   "display": "standalone",
   "background_color": "#f5f5f5",

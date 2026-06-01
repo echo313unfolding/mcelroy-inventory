@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="UGSI Parts">
+<meta name="apple-mobile-web-app-title" content="Shop App">
 <link rel="manifest" href="manifest.json">
-<title>UGSI Shop</title>
+<title>Shop App</title>
 <style>
 :root {
   /* Azuria Water Solutions / Underground Solutions brand */
@@ -347,7 +347,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
 
 <header>
   <div>
-    <h1>UGSI McElroy Shop</h1>
+    <h1>Shop App</h1>
     <div class="sub">Underground Solutions Division - Azuria Water Solutions</div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
@@ -437,27 +437,39 @@ header .sub { font-size: 11px; opacity: 0.7; }
 <div id="report-panel" class="panel">
   <div class="stats-row" id="reportStats"></div>
 
+  <div class="section-hdr">Reports</div>
   <div class="report-card" onclick="showInteractiveReport('inventory')">
     <h3>Inventory Snapshot</h3>
-    <p>Full parts list with stock levels, locations, prices</p>
+    <p>Full parts list with stock levels, bins, prices. Tap any row to edit.</p>
   </div>
   <div class="report-card" onclick="showInteractiveReport('lowstock')">
     <h3>Low Stock Alert</h3>
-    <p>Parts below reorder point — flag for purchasing</p>
+    <p>Parts below reorder point — tap to set reorder levels</p>
+  </div>
+  <div class="report-card" onclick="showInteractiveReport('bins')">
+    <h3>Bin Inventory</h3>
+    <p>All bin assignments with quantities and part details</p>
   </div>
   <div class="report-card" onclick="showInteractiveReport('fleet')">
     <h3>Fleet Status</h3>
-    <p>All machines with serials, status, job assignments</p>
+    <p>All machines with serials, status, job assignments. Tap to edit.</p>
   </div>
   <div class="report-card" onclick="showInteractiveReport('jobs')">
     <h3>Job Summary</h3>
     <p>Active jobs with assigned machines and locations</p>
   </div>
-  <div class="report-card" onclick="syncNow()">
-    <h3>Sync Now</h3>
-    <p id="syncStatus">Force refresh from InvenTree. Last sync: checking...</p>
+
+  <div class="section-hdr" style="margin-top:8px">Import &amp; Sync</div>
+  <div class="report-card" onclick="showCSVImport()">
+    <h3>Import CSV</h3>
+    <p>Import parts, stock levels, or bin assignments from a spreadsheet</p>
   </div>
-  <div class="section-hdr" style="margin-top:8px">Backup &amp; Export</div>
+  <div class="report-card" onclick="doSyncNow()">
+    <h3>Sync Data</h3>
+    <p id="syncStatus">Reload parts and fleet from server. Last sync: checking...</p>
+  </div>
+
+  <div class="section-hdr" style="margin-top:8px">Backup</div>
   <div class="report-card" onclick="exportBackup()">
     <h3>Export Backup</h3>
     <p>Download fleet + bins data as a JSON file. Save this to a USB drive.</p>
@@ -467,11 +479,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
     <p>Restore fleet + bins from a backup file.</p>
   </div>
   <input type="file" id="backupFileInput" accept=".json" style="display:none" onchange="handleBackupImport(event)">
-
-  <div style="padding:12px 14px;font-size:12px;color:#888">
-    Tap any report to preview, then download CSV.<br>
-    Data is stored locally in SQLite. Export a backup regularly.
-  </div>
+  <input type="file" id="csvFileInput" accept=".csv,.tsv,.txt" style="display:none" onchange="handleCSVImport(event)">
 </div>
 
 <!-- ============ REPORT VIEWER MODAL ============ -->
@@ -531,31 +539,31 @@ header .sub { font-size: 11px; opacity: 0.7; }
     </div>
 
     <div style="border-bottom:1px solid var(--border);padding-bottom:12px;margin-bottom:12px">
-      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Integrations</div>
-      <div style="font-size:12px;color:#888;margin-bottom:8px">Connect to existing systems. Each integration can push/pull data.</div>
+      <div style="font-weight:600;font-size:14px;margin-bottom:8px">Data Sources</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px">How data gets into and out of Shop App.</div>
 
       <div class="card" style="margin:6px 0;background:var(--gray)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><strong style="font-size:13px">SharePoint / OneDrive</strong><br><span style="font-size:11px;color:#888">Auto-upload reports to shared folder</span></div>
-          <span class="card-badge badge-shop">Coming Soon</span>
+          <div><strong style="font-size:13px">CSV Import</strong><br><span style="font-size:11px;color:#888">Import bin assignments, stock levels, or reorder points from spreadsheet</span></div>
+          <span class="card-badge badge-ok">Active</span>
         </div>
       </div>
       <div class="card" style="margin:6px 0;background:var(--gray)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><strong style="font-size:13px">Email Alerts</strong><br><span style="font-size:11px;color:#888">Auto-email low stock reports to purchasing</span></div>
-          <span class="card-badge badge-shop">Coming Soon</span>
+          <div><strong style="font-size:13px">JSON Backup / Restore</strong><br><span style="font-size:11px;color:#888">Export all fleet + bins to file, restore from backup</span></div>
+          <span class="card-badge badge-ok">Active</span>
         </div>
       </div>
       <div class="card" style="margin:6px 0;background:var(--gray)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><strong style="font-size:13px">CSV Import (Legacy Migration)</strong><br><span style="font-size:11px;color:#888">Watch a folder for CSV exports from old systems</span></div>
-          <span class="card-badge badge-shop">Coming Soon</span>
+          <div><strong style="font-size:13px">CSV / Email Reports</strong><br><span style="font-size:11px;color:#888">Download reports as CSV or email via mailto: link</span></div>
+          <span class="card-badge badge-ok">Active</span>
         </div>
       </div>
       <div class="card" style="margin:6px 0;background:var(--gray)">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><strong style="font-size:13px">ERP / Accounting Sync</strong><br><span style="font-size:11px;color:#888">Push stock changes to existing ERP system</span></div>
-          <span class="card-badge badge-shop">Coming Soon</span>
+          <div><strong style="font-size:13px">InvenTree Sync</strong><br><span style="font-size:11px;color:#888">Full API sync when InvenTree Docker stack is running</span></div>
+          <span class="card-badge" style="background:var(--navy-light);color:var(--navy)" id="setInvenTreeBadge">Available</span>
         </div>
       </div>
     </div>
@@ -1196,9 +1204,9 @@ async function syncFromAPI(silent) {
   }
 }
 
-// Manual sync — called from the Sync Now button
+// Manual sync — called from the Sync Now button in header
 async function syncNow() {
-  await syncFromAPI(false);
+  await doSyncNow();
 }
 
 // ============================================================
@@ -1861,7 +1869,7 @@ function printSingleLabel(qrText, title, type) {
     '<div class="big">' + esc(qrText) + '</div>' +
     '<div class="sub">' + esc(title) + '</div>' +
     '<div class="qr">' + qrSvg + '</div>' +
-    '<div class="sub">UGSI McElroy Shop</div></div></div></body></html>';
+    '<div class="sub">Shop App</div></div></div></body></html>';
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
@@ -1882,7 +1890,7 @@ function printBinLabels() {
 
   const machines = loadMachines();
 
-  let html = '<!DOCTYPE html><html><head><title>UGSI Shop Labels</title><style>' +
+  let html = '<!DOCTYPE html><html><head><title>Shop App Labels</title><style>' +
     'body{font-family:Arial,sans-serif;margin:0;padding:10px}' +
     '.label-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}' +
     '.label{border:2px solid #333;border-radius:8px;padding:12px;text-align:center;page-break-inside:avoid}' +
@@ -1906,7 +1914,7 @@ function printBinLabels() {
       '<div class="big">' + esc(bin) + '</div>' +
       '<div class="sub">' + count + ' part' + (count !== 1 ? 's' : '') + '</div>' +
       '<div class="qr">' + makeQR(bin) + '</div>' +
-      '<div class="sub">UGSI McElroy Shop</div></div>';
+      '<div class="sub">Shop App</div></div>';
   });
   html += '</div>';
 
@@ -1920,7 +1928,7 @@ function printBinLabels() {
       '<div class="sub">' + esc(m.model) + '</div>' +
       (m.serial ? '<div class="sub">S/N: ' + esc(m.serial) + '</div>' : '') +
       '<div class="qr">' + makeQR(mQR) + '</div>' +
-      '<div class="sub">UGSI McElroy Shop</div></div>';
+      '<div class="sub">Shop App</div></div>';
   });
   html += '</div>';
 
@@ -1995,6 +2003,124 @@ async function handleBackupImport(event) {
     alert('Failed to import: ' + e.message);
   }
   event.target.value = '';
+}
+
+// ============================================================
+// SYNC & CSV IMPORT
+// ============================================================
+async function doSyncNow() {
+  const statusEl = document.getElementById('syncStatus');
+  statusEl.textContent = 'Syncing...';
+  if (BACKEND === 'lite') {
+    const ok = await syncFleetFromLite();
+    const parts = await fetchPartsFromLite();
+    if (parts && parts.parts) {
+      saveCache(parts);
+      hydrateFromCache(parts);
+      buildUI();
+    }
+    await syncBins();
+    renderFleet();
+    renderReportStats();
+    statusEl.textContent = ok ? 'Synced just now. ' + allParts.length + ' parts.' : 'Sync failed — server unreachable.';
+  } else if (BACKEND === 'inventree') {
+    await syncFromAPI(false);
+  } else {
+    statusEl.textContent = 'No server connected. Using cached data.';
+  }
+}
+
+function showCSVImport() {
+  document.getElementById('modalContent').innerHTML =
+    '<h2 style="font-size:18px;text-align:center;margin-bottom:12px">Import CSV</h2>' +
+    '<div style="font-size:13px;color:#666;margin-bottom:16px">' +
+      '<p style="margin-bottom:8px">Import parts data, bin assignments, or stock levels from a CSV file.</p>' +
+      '<p><strong>Supported formats:</strong></p>' +
+      '<ul style="margin:8px 0 0 16px;line-height:1.8">' +
+        '<li><strong>Bin assignments:</strong> columns <code>IPN</code> (or <code>SKU</code>) + <code>Bin</code> + optional <code>Qty</code>, <code>Notes</code></li>' +
+        '<li><strong>Stock levels:</strong> columns <code>IPN</code> (or <code>SKU</code>) + <code>Stock</code> (or <code>Qty</code>)</li>' +
+        '<li><strong>Reorder points:</strong> columns <code>IPN</code> (or <code>SKU</code>) + <code>Reorder</code> (or <code>Min Stock</code>)</li>' +
+      '</ul>' +
+      '<p style="margin-top:12px;color:#888">First row must be column headers. Comma or tab separated.</p>' +
+    '</div>' +
+    '<button onclick="document.getElementById(\'csvFileInput\').click()" class="save-btn" style="font-size:16px;padding:14px">Choose CSV File</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
+  openModal();
+}
+
+async function handleCSVImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  try {
+    const text = await file.text();
+    const sep = text.includes('\t') ? '\t' : ',';
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) { alert('CSV has no data rows.'); return; }
+
+    // Parse header
+    const header = lines[0].split(sep).map(h => h.trim().replace(/^"(.*)"$/, '$1').toLowerCase());
+
+    // Detect format
+    const ipnCol = header.findIndex(h => h === 'ipn' || h === 'sku' || h === 'part number' || h === 'part_number' || h === 'partnumber');
+    const binCol = header.findIndex(h => h === 'bin' || h === 'bin label' || h === 'location');
+    const qtyCol = header.findIndex(h => h === 'qty' || h === 'quantity' || h === 'stock' || h === 'bin qty');
+    const notesCol = header.findIndex(h => h === 'notes' || h === 'note' || h === 'comment');
+    const reorderCol = header.findIndex(h => h === 'reorder' || h === 'min stock' || h === 'minimum_stock' || h === 'reorder point');
+
+    if (ipnCol === -1) {
+      alert('CSV must have an IPN, SKU, or Part Number column.\n\nFound columns: ' + header.join(', '));
+      return;
+    }
+
+    let imported = 0, notFound = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cells = lines[i].split(sep).map(c => c.trim().replace(/^"(.*)"$/, '$1'));
+      const ipn = (cells[ipnCol] || '').toUpperCase();
+      if (!ipn) continue;
+
+      const part = allParts.find(p => (p.IPN || '').toUpperCase() === ipn);
+      if (!part) { notFound++; continue; }
+
+      // Bin assignment
+      if (binCol !== -1) {
+        const bin = (cells[binCol] || '').toUpperCase();
+        const qty = qtyCol !== -1 ? (parseFloat(cells[qtyCol]) || 0) : 0;
+        const notes = notesCol !== -1 ? (cells[notesCol] || '') : '';
+        if (bin) {
+          await saveBin(part.pk, bin, qty, notes, '');
+          imported++;
+        }
+      }
+      // Reorder point (stored locally — lite server doesn't track this yet)
+      if (reorderCol !== -1) {
+        const rp = parseInt(cells[reorderCol]) || 0;
+        if (rp > 0) {
+          part.minimum_stock = rp;
+          imported++;
+        }
+      }
+      // Stock qty without bin (update bin qty if bin exists)
+      if (binCol === -1 && qtyCol !== -1) {
+        const qty = parseFloat(cells[qtyCol]) || 0;
+        const bd = partBins[part.pk] || {};
+        if (bd.bin) {
+          await saveBin(part.pk, bd.bin, qty, bd.notes || '', bd.qr_code || '');
+          imported++;
+        }
+      }
+    }
+
+    closeModal();
+    renderBinsTab();
+    renderReportStats();
+
+    const msg = 'Import complete: ' + imported + ' updated.';
+    alert(notFound > 0 ? msg + '\n' + notFound + ' SKUs not found in parts catalog.' : msg);
+  } catch(e) {
+    alert('Import failed: ' + e.message);
+  }
 }
 
 // ============================================================
@@ -2378,7 +2504,7 @@ function getReportData(type) {
         stock.items.map(s => s.location + '(' + s.quantity + ')').join('; '),
         price ? '$' + price[1] : ''];
     });
-    return { title: 'Inventory Snapshot', filename: 'UGSI_Inventory_' + today(), header, rows,
+    return { title: 'Inventory Snapshot', filename: 'Shop_Inventory_' + today(), header, rows, editable: 'part',
       summary: [
         { label: 'Total Parts', value: allParts.length, color: 'var(--navy)' },
         { label: 'In Stock', value: allParts.filter(p => getPartStock(p.pk).total > 0).length, color: 'var(--navy)' },
@@ -2397,10 +2523,29 @@ function getReportData(type) {
           stock.total, rp, rp - stock.total, price ? '$' + price[1] : '']);
       }
     });
-    return { title: 'Low Stock Alert', filename: 'UGSI_Low_Stock_' + today(), header, rows,
+    return { title: 'Low Stock Alert', filename: 'Shop_Low_Stock_' + today(), header, rows, editable: 'part',
       summary: [
         { label: 'Items Below Reorder', value: rows.length, color: rows.length > 0 ? '#E65100' : 'var(--navy)' },
         { label: 'Total Shortfall', value: rows.reduce((s,r) => s + (r[5]||0), 0), color: '#B71C1C' },
+      ]};
+  }
+  if (type === 'bins') {
+    const header = ['Bin', 'Part Name', 'SKU', 'Category', 'Bin Qty', 'System Stock', 'Notes'];
+    const rows = [];
+    allParts.forEach(p => {
+      const bd = partBins[p.pk];
+      if (!bd || !bd.bin) return;
+      const stock = getPartStock(p.pk);
+      rows.push([bd.bin, p.name, p.IPN || '', allCategories[p.category] || '',
+        bd.stock_qty || 0, stock.total, bd.notes || '']);
+    });
+    rows.sort((a, b) => a[0].localeCompare(b[0]));
+    const uniqueBins = [...new Set(rows.map(r => r[0]))];
+    return { title: 'Bin Inventory', filename: 'Shop_Bins_' + today(), header, rows, editable: 'part',
+      summary: [
+        { label: 'Bins', value: uniqueBins.length, color: 'var(--accent)' },
+        { label: 'Parts Binned', value: rows.length, color: 'var(--navy)' },
+        { label: 'Total Qty', value: rows.reduce((s, r) => s + (r[4] || 0), 0), color: 'var(--navy)' },
       ]};
   }
   if (type === 'fleet') {
@@ -2413,7 +2558,7 @@ function getReportData(type) {
         m.status, j ? j.name : '', j ? j.location : ''];
     });
     const mList = Object.values(machines);
-    return { title: 'Fleet Status', filename: 'UGSI_Fleet_' + today(), header, rows,
+    return { title: 'Fleet Status', filename: 'Shop_Fleet_' + today(), header, rows, editable: 'machine',
       summary: [
         { label: 'Total Machines', value: mList.length, color: 'var(--navy)' },
         { label: 'In Field', value: mList.filter(m => m.status === 'Field').length, color: 'var(--accent)' },
@@ -2427,10 +2572,12 @@ function getReportData(type) {
   const header = ['Job Name', 'Location', 'Pipe Spec', 'Status', 'Machines', 'Machine IDs', 'Created'];
   const rows = Object.values(jobs).map(j => {
     const assigned = Object.values(machines).filter(m => m.job === j.id);
-    return [j.name, j.location, j.pipe, j.status, assigned.length,
+    const row = [j.name, j.location, j.pipe, j.status, assigned.length,
       assigned.map(m => m.id).join('; '), j.created || ''];
+    row._jobId = j.id;
+    return row;
   });
-  return { title: 'Job Summary', filename: 'UGSI_Jobs_' + today(), header, rows,
+  return { title: 'Job Summary', filename: 'Shop_Jobs_' + today(), header, rows, editable: 'job',
     summary: [
       { label: 'Active Jobs', value: Object.values(jobs).filter(j => j.status === 'Active').length, color: 'var(--navy)' },
       { label: 'Total Jobs', value: Object.values(jobs).length, color: 'var(--blue-mid)' },
@@ -2442,8 +2589,8 @@ function getReportData(type) {
 // ============================================================
 function showInteractiveReport(type) {
   const data = getReportData(type);
-  if (data.rows.length === 0 && type !== 'inventory') {
-    alert('No data for this report yet.');
+  if (data.rows.length === 0 && type === 'jobs') {
+    alert('No jobs created yet. Go to Fleet tab and tap "+ Job" to create one.');
     return;
   }
 
@@ -2483,12 +2630,22 @@ function showInteractiveReport(type) {
   html += '<table class="report-table"><thead><tr>';
   data.header.forEach(h => { html += '<th>' + esc(h) + '</th>'; });
   html += '</tr></thead><tbody>';
-  showRows.forEach(row => {
-    html += '<tr>';
+  showRows.forEach((row, rowIdx) => {
+    // Build onclick for editable rows
+    let onclick = '';
+    if (data.editable === 'part') {
+      const sku = row[1] || row[0]; // SKU column or Part Name
+      onclick = ' onclick="closeReportModal();scanAndShow(\'' + esc(sku) + '\')" style="cursor:pointer"';
+    } else if (data.editable === 'machine') {
+      onclick = ' onclick="closeReportModal();showEditMachine(\'' + esc(row[0]) + '\')" style="cursor:pointer"';
+    } else if (data.editable === 'job' && row._jobId) {
+      onclick = ' onclick="closeReportModal();showEditJob(\'' + esc(row._jobId) + '\')" style="cursor:pointer"';
+    }
+    html += '<tr' + onclick + '>';
     row.forEach((cell, i) => {
       let style = '';
       // Color-code stock/status columns
-      if (data.header[i] === 'In Stock' || data.header[i] === 'Shortfall') {
+      if (data.header[i] === 'In Stock' || data.header[i] === 'Shortfall' || data.header[i] === 'Bin Qty') {
         const v = parseInt(cell) || 0;
         style = ' style="font-weight:600;color:' + (v > 0 ? (data.header[i] === 'Shortfall' ? '#E65100' : 'var(--navy)') : '#B71C1C') + '"';
       }
@@ -2503,6 +2660,22 @@ function showInteractiveReport(type) {
   html += '</tbody></table></div>';
   if (data.rows.length > 100)
     html += '<div style="text-align:center;font-size:12px;color:#888;margin-top:6px">Showing 100 of ' + data.rows.length + ' rows. Download CSV for full report.</div>';
+
+  if (data.rows.length === 0 && type === 'lowstock') {
+    html += '<div style="text-align:center;padding:24px;color:#888">' +
+      '<p style="font-size:14px;margin-bottom:8px">No reorder points set yet.</p>' +
+      '<p style="font-size:13px">Tap a part in the Inventory report or scan it, then set its reorder level.</p>' +
+      '<button onclick="closeReportModal();showInteractiveReport(\'inventory\')" style="margin-top:12px;padding:10px 20px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">Open Inventory</button></div>';
+  }
+  if (data.rows.length === 0 && type === 'bins') {
+    html += '<div style="text-align:center;padding:24px;color:#888">' +
+      '<p style="font-size:14px;margin-bottom:8px">No bins assigned yet.</p>' +
+      '<p style="font-size:13px">Scan a part and assign it to a bin, or go to the Bins tab.</p></div>';
+  }
+
+  if (data.editable) {
+    html += '<div style="text-align:center;font-size:12px;color:var(--accent);margin-top:6px;font-weight:600">Tap any row to edit</div>';
+  }
 
   html += '<button class="close-btn" onclick="closeReportModal()" style="background:#888">Close</button>';
   document.getElementById('reportModalContent').innerHTML = html;
@@ -2536,7 +2709,7 @@ function emailReport(type) {
   const subject = encodeURIComponent('UGSI ' + data.title + ' - ' + today());
   // Build a plain-text table for the email body
   let body = data.title + ' — ' + today() + '\n';
-  body += 'Generated by UGSI McElroy Shop\n\n';
+  body += 'Generated by Shop App\n\n';
   data.summary.forEach(s => { body += s.label + ': ' + s.value + '\n'; });
   body += '\n' + data.header.join(' | ') + '\n';
   body += data.header.map(() => '---').join(' | ') + '\n';
@@ -2545,7 +2718,7 @@ function emailReport(type) {
     body += r.map(c => String(c || '')).join(' | ') + '\n';
   });
   if (data.rows.length > 50) body += '\n... and ' + (data.rows.length - 50) + ' more rows. Download CSV for full report.\n';
-  body += '\n---\nUGSI McElroy Shop — Underground Solutions Division';
+  body += '\n---\nShop App — Underground Solutions Division';
   window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(body);
 }
 
