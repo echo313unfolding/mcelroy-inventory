@@ -402,7 +402,8 @@ header .sub { font-size: 11px; opacity: 0.7; }
       <option value="Needs Repair">Needs Repair</option>
       <option value="Out of Service">Out of Service</option>
     </select>
-    <button onclick="showAddJob()" style="padding:8px 12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">+ Job</button>
+    <button onclick="showAddMachine()" style="padding:8px 12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">+ Machine</button>
+    <button onclick="showAddJob()" style="padding:8px 12px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600">+ Job</button>
   </div>
   <div id="fleetList"></div>
 </div>
@@ -410,7 +411,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
 <!-- ============ PARTS PANEL ============ -->
 <div id="parts-panel" class="panel">
   <div class="search-bar">
-    <input type="search" id="partsSearch" placeholder="Search by name, SKU..." oninput="filterParts()">
+    <input type="search" id="partsSearch" placeholder="Search by name, SKU, bin..." oninput="filterParts()">
     <select id="partsCatFilter" onchange="filterParts()"><option value="">All Categories</option></select>
     <select id="partsMachineFilter" onchange="filterParts()">
       <option value="">All Machines</option>
@@ -419,6 +420,10 @@ header .sub { font-size: 11px; opacity: 0.7; }
       <option value="1200">1200</option>
     </select>
     <span class="count" id="partsCount"></span>
+  </div>
+  <div style="padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;background:white;border-bottom:1px solid var(--border)">
+    <button onclick="doSyncNow()" style="padding:6px 12px;background:var(--navy);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Sync</button>
+    <button onclick="showCSVImport()" style="padding:6px 12px;background:var(--accent);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Import CSV</button>
   </div>
   <div id="partsList"></div>
 </div>
@@ -2282,7 +2287,8 @@ function showEditMachine(id) {
     '</div>' +
 
     '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')" style="font-size:16px;padding:14px">Save Changes</button>' +
-    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
+    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>' +
+    '<button class="danger-btn" onclick="deleteMachine(\'' + esc(id) + '\')" style="margin-top:12px">Delete Machine</button>';
   openModal();
 }
 
@@ -2312,6 +2318,91 @@ function saveMachine(id) {
   saveMachineToServer(id);  // Persist to InvenTree
   closeModal();
   renderFleet();
+}
+
+// ============================================================
+// ADD / DELETE MACHINE
+// ============================================================
+function showAddMachine() {
+  document.getElementById('modalContent').innerHTML =
+    '<h2 style="font-size:18px;text-align:center;margin-bottom:12px">Add Machine</h2>' +
+    '<div class="edit-field">' +
+      '<label>Machine Family</label>' +
+      '<select id="amFamily">' +
+        FAMILIES.map(f => '<option value="' + f.family + '">' + f.model + '</option>').join('') +
+      '</select>' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Machine ID</label>' +
+      '<input id="amId" placeholder="e.g. UGSI-618-021" style="font-weight:700">' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>McElroy Serial # (optional)</label>' +
+      '<input id="amSerial" placeholder="On machine nameplate">' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Engine Serial (optional)</label>' +
+      '<input id="amEngineSerial" placeholder="On engine plate">' +
+    '</div>' +
+    '<div class="edit-field">' +
+      '<label>Notes (optional)</label>' +
+      '<input id="amNotes" placeholder="Any details">' +
+    '</div>' +
+    '<button class="save-btn" onclick="saveNewMachine()" style="font-size:16px;padding:14px">Add Machine</button>' +
+    '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>';
+
+  // Auto-generate next ID
+  setTimeout(() => {
+    const famSel = document.getElementById('amFamily');
+    function updateId() {
+      const fam = FAMILIES.find(f => f.family === famSel.value);
+      if (!fam) return;
+      const existing = Object.keys(allMachines).filter(k => k.startsWith(fam.prefix));
+      const next = existing.length + 1;
+      document.getElementById('amId').placeholder = fam.prefix + '-' + String(next).padStart(3, '0');
+    }
+    famSel.addEventListener('change', updateId);
+    updateId();
+  }, 0);
+
+  openModal();
+}
+
+function saveNewMachine() {
+  const family = document.getElementById('amFamily').value;
+  const fam = FAMILIES.find(f => f.family === family);
+  let id = document.getElementById('amId').value.trim();
+  if (!id) id = document.getElementById('amId').placeholder;
+  if (!id || !fam) { alert('Enter a machine ID.'); return; }
+  id = id.toUpperCase();
+
+  if (allMachines[id]) { alert('Machine ' + id + ' already exists.'); return; }
+
+  allMachines[id] = {
+    id, family, model: fam.model, engine_type: fam.engine,
+    serial: document.getElementById('amSerial').value.trim(),
+    engine_serial: document.getElementById('amEngineSerial').value.trim(),
+    hours: '', status: 'Shop', job: '', location: '',
+    notes: document.getElementById('amNotes').value.trim(),
+    qr_code: '',
+  };
+  saveMachineToServer(id);
+  closeModal();
+  renderFleet();
+  renderReportStats();
+}
+
+function deleteMachine(id) {
+  if (!confirm('Delete machine ' + id + '? This cannot be undone.')) return;
+  delete allMachines[id];
+  localStorage.setItem('ugsi_machines_cache', JSON.stringify(allMachines));
+  // Delete from server if lite backend
+  if (BACKEND === 'lite') {
+    fetch(BASE + '/api/fleet/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
+  }
+  closeModal();
+  renderFleet();
+  renderReportStats();
 }
 
 // ============================================================
@@ -2408,9 +2499,12 @@ function renderParts(parts) {
     const cat = allCategories[p.category] || '';
     const stock = getPartStock(p.pk);
     const isLow = stock.total > 0 && stock.total <= (p.minimum_stock || 0);
-    const bin = partBins[p.pk]?.bin || '';
-    return '<div class="card" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')">' +
-      '<div class="part-row">' +
+    const bd = partBins[p.pk] || {};
+    const bin = bd.bin || '';
+    const binQty = bd.stock_qty || 0;
+    const qrText = getPartQR(p);
+    return '<div class="card" style="padding:0;overflow:hidden">' +
+      '<div class="part-row" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')" style="padding:12px 14px;cursor:pointer">' +
       '<div class="part-info">' +
       '<div class="part-name">' + esc(p.name) + '</div>' +
       (p.IPN ? '<div class="part-sku">' + esc(p.IPN) + '</div>' : '') +
@@ -2423,8 +2517,97 @@ function renderParts(parts) {
       stock.total + '</div>' +
       (bin ? '<div class="loc" style="color:var(--accent);font-weight:600">' + esc(bin) + '</div>' :
        stock.items.length > 0 ? '<div class="loc">' + esc(stock.items[0].location) + '</div>' : '') +
-      '</div></div></div>';
+      '</div></div>' +
+      '<div style="display:flex;border-top:1px solid var(--border);font-size:12px">' +
+      '<button onclick="quickStockAdj(' + p.pk + ',1)" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:var(--green);font-weight:700;font-size:13px;cursor:pointer">+ Stock</button>' +
+      '<button onclick="quickStockAdj(' + p.pk + ',-1)" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:#888;font-weight:700;font-size:13px;cursor:pointer">- Stock</button>' +
+      '<button onclick="quickBinEdit(' + p.pk + ')" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:var(--accent);font-weight:600;font-size:12px;cursor:pointer">' + (bin ? 'Bin ' + esc(bin) : 'Set Bin') + '</button>' +
+      '<button onclick="printSingleLabel(\'' + esc(qrText) + '\',\'' + esc(p.name) + '\',\'part\')" style="flex:1;padding:8px 0;background:none;border:none;color:#555;font-weight:600;font-size:12px;cursor:pointer">QR</button>' +
+      '</div></div>';
   }).join('');
+}
+
+function quickStockAdj(partPk, direction) {
+  const part = allParts.find(p => p.pk === partPk);
+  if (!part) return;
+  const bd = partBins[partPk] || {};
+  const curQty = bd.stock_qty || 0;
+  const label = direction > 0 ? 'Add to' : 'Remove from';
+  const html =
+    '<div style="padding:20px">' +
+    '<h3 style="margin:0 0 4px">' + label + ' Stock</h3>' +
+    '<div style="font-size:13px;color:#666;margin-bottom:16px">' + esc(part.name) + '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:16px">' +
+    '<button onclick="document.getElementById(\'qsQty\').stepDown()" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--border);background:white;font-size:20px;cursor:pointer">-</button>' +
+    '<input id="qsQty" type="number" value="1" min="1" style="width:70px;padding:10px;text-align:center;font-size:20px;font-weight:700;border:2px solid var(--border);border-radius:8px">' +
+    '<button onclick="document.getElementById(\'qsQty\').stepUp()" style="width:44px;height:44px;border-radius:50%;border:2px solid var(--border);background:white;font-size:20px;cursor:pointer">+</button>' +
+    '</div>' +
+    '<div style="text-align:center;font-size:13px;color:#888;margin-bottom:16px">Current bin stock: <strong>' + curQty + '</strong>' +
+    (bd.bin ? ' (Bin ' + esc(bd.bin) + ')' : '') + '</div>' +
+    '<button onclick="doQuickStockAdj(' + partPk + ',' + direction + ')" style="width:100%;padding:14px;background:' +
+    (direction > 0 ? 'var(--green)' : '#888') + ';color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">' +
+    (direction > 0 ? 'Add Stock' : 'Remove Stock') + '</button>' +
+    '<div id="qsStatus" style="text-align:center;font-size:12px;margin-top:8px"></div>' +
+    '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function doQuickStockAdj(partPk, direction) {
+  const qty = parseInt(document.getElementById('qsQty').value) || 1;
+  const statusEl = document.getElementById('qsStatus');
+  const bd = partBins[partPk] || {};
+  const curQty = bd.stock_qty || 0;
+  const newQty = Math.max(0, curQty + (qty * direction));
+
+  statusEl.textContent = 'Saving...';
+  statusEl.style.color = '#888';
+
+  await saveBin(partPk, bd.bin || '', newQty, bd.notes || '', bd.qr_code || '');
+
+  statusEl.textContent = 'Updated: ' + curQty + ' → ' + newQty;
+  statusEl.style.color = 'var(--green)';
+  setTimeout(() => { closeModal(); filterParts(); }, 800);
+}
+
+function quickBinEdit(partPk) {
+  const part = allParts.find(p => p.pk === partPk);
+  if (!part) return;
+  const bd = partBins[partPk] || {};
+  const html =
+    '<div style="padding:20px">' +
+    '<h3 style="margin:0 0 4px">Edit Bin</h3>' +
+    '<div style="font-size:13px;color:#666;margin-bottom:16px">' + esc(part.name) + '</div>' +
+    '<label style="font-size:12px;font-weight:600;color:#888">Bin Label</label>' +
+    '<input id="qbBin" value="' + esc(bd.bin || '') + '" placeholder="e.g. A1, B3, SHELF-2" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:16px;font-weight:700;text-transform:uppercase;text-align:center;box-sizing:border-box;margin:4px 0 12px">' +
+    '<label style="font-size:12px;font-weight:600;color:#888">Bin Qty</label>' +
+    '<input id="qbQty" type="number" value="' + (bd.stock_qty || 0) + '" min="0" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:16px;text-align:center;box-sizing:border-box;margin:4px 0 12px">' +
+    '<label style="font-size:12px;font-weight:600;color:#888">Notes</label>' +
+    '<input id="qbNotes" value="' + esc(bd.notes || '') + '" placeholder="Optional notes" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 12px">' +
+    '<label style="font-size:12px;font-weight:600;color:#888">Custom QR Code</label>' +
+    '<input id="qbQR" value="' + esc(bd.qr_code || '') + '" placeholder="Default: ' + esc(part.IPN || part.name) + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;box-sizing:border-box;margin:4px 0 16px">' +
+    '<button onclick="doQuickBinSave(' + partPk + ')" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Save Bin</button>' +
+    '<div id="qbStatus" style="text-align:center;font-size:12px;margin-top:8px"></div>' +
+    '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function doQuickBinSave(partPk) {
+  const bin = (document.getElementById('qbBin').value || '').trim().toUpperCase();
+  const qty = parseFloat(document.getElementById('qbQty').value) || 0;
+  const notes = (document.getElementById('qbNotes').value || '').trim();
+  const qr = (document.getElementById('qbQR').value || '').trim();
+  const statusEl = document.getElementById('qbStatus');
+
+  statusEl.textContent = 'Saving...';
+  statusEl.style.color = '#888';
+
+  await saveBin(partPk, bin, qty, notes, qr);
+
+  statusEl.textContent = bin ? 'Saved — Bin ' + bin : 'Bin cleared';
+  statusEl.style.color = 'var(--green)';
+  setTimeout(() => { closeModal(); filterParts(); }, 800);
 }
 
 function filterParts() {

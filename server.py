@@ -170,6 +170,15 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
 
         self.send_error(404)
 
+    def do_DELETE(self):
+        path = urllib.parse.urlparse(self.path).path
+
+        if path.startswith("/api/fleet/"):
+            machine_id = urllib.parse.unquote(path[len("/api/fleet/"):].rstrip("/"))
+            return self._delete_machine(machine_id)
+
+        self.send_error(404)
+
     def do_OPTIONS(self):
         """Handle CORS preflight."""
         self.send_response(200)
@@ -197,9 +206,26 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
     def _update_machine(self, machine_id, data):
         db = get_db()
         row = db.execute("SELECT * FROM machines WHERE id = ?", (machine_id,)).fetchone()
+
         if not row:
+            # Create new machine (upsert)
+            family = data.get("family", machine_id.split("-")[1] if "-" in machine_id else "")
+            fam_info = next((f for f in FAMILIES if f["family"] == family), None)
+            model = data.get("model", fam_info["model"] if fam_info else "")
+            engine = data.get("engine_type", fam_info["engine"] if fam_info else "")
+            db.execute(
+                "INSERT INTO machines (id, family, model, engine_type, serial, engine_serial, hours, status, job, location, notes, qr_code) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (machine_id, family, model, engine,
+                 data.get("serial", ""), data.get("engine_serial", ""),
+                 data.get("hours", ""), data.get("status", "Shop"),
+                 data.get("job", ""), data.get("location", ""),
+                 data.get("notes", ""), data.get("qr_code", "")),
+            )
+            db.commit()
+            row = db.execute("SELECT * FROM machines WHERE id = ?", (machine_id,)).fetchone()
             db.close()
-            self.send_error(404, f"Machine {machine_id} not found")
+            self._json_response(dict(row))
             return
 
         # Update only provided fields
@@ -214,6 +240,18 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
         row = db.execute("SELECT * FROM machines WHERE id = ?", (machine_id,)).fetchone()
         db.close()
         self._json_response(dict(row))
+
+    def _delete_machine(self, machine_id):
+        db = get_db()
+        row = db.execute("SELECT * FROM machines WHERE id = ?", (machine_id,)).fetchone()
+        if not row:
+            db.close()
+            self.send_error(404, f"Machine {machine_id} not found")
+            return
+        db.execute("DELETE FROM machines WHERE id = ?", (machine_id,))
+        db.commit()
+        db.close()
+        self._json_response({"deleted": machine_id})
 
     # ---- Bin handlers ----
 
@@ -287,7 +325,7 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
 
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _guess_type(self, filepath):
