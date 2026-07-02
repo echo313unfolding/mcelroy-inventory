@@ -91,6 +91,19 @@ header .sub { font-size: 11px; opacity: 0.7; }
 .badge-ok { background: var(--navy-light); color: var(--navy); }
 .badge-out { background: var(--red); color: var(--red-text); }
 
+/* Scan sub-tabs */
+.scan-subtabs {
+  display: flex; background: white; border-bottom: 2px solid var(--border);
+}
+.scan-subtabs button {
+  flex: 1; padding: 16px 0; border: none; background: none; font-size: 18px;
+  font-weight: 700; color: #888; cursor: pointer; border-bottom: 4px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.scan-subtabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.scan-subpanel { display: none; }
+.scan-subpanel.active { display: block; }
+
 /* Scan panel */
 .scan-input-row {
   display: flex; gap: 8px; padding: 12px; background: white;
@@ -104,10 +117,6 @@ header .sub { font-size: 11px; opacity: 0.7; }
   padding: 10px 16px; background: var(--accent); color: white; border: none;
   border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
   white-space: nowrap;
-}
-#scanCameraBtn {
-  padding: 10px 14px; background: var(--navy); color: white; border: none;
-  border-radius: 8px; cursor: pointer;
 }
 #scannerContainer {
   display: none; background: black; position: relative;
@@ -361,32 +370,105 @@ header .sub { font-size: 11px; opacity: 0.7; }
 
 <!-- ============ SCAN PANEL ============ -->
 <div id="scan-panel" class="panel active">
-  <div class="scan-input-row">
-    <input type="text" id="scanInput" placeholder="Machine ID or Part #" autocomplete="off"
-           onkeydown="if(event.key==='Enter')doLookup()">
-    <button onclick="doLookup()">Look Up</button>
-    <button id="scanCameraBtn" onclick="toggleScanner()" title="Open camera scanner">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/>
-        <rect x="6" y="12" width="4" height="4"/><rect x="14" y="12" width="4" height="4"/>
-      </svg>
-    </button>
+  <div class="scan-subtabs">
+    <button class="active" onclick="showScanSub('scan',this)">Scan</button>
+    <button onclick="showScanSub('add',this)">Add</button>
+    <button onclick="showScanSub('edit',this)">Edit</button>
   </div>
 
-  <div id="scannerContainer">
-    <button class="close-scanner" onclick="toggleScanner()">X</button>
-    <div id="reader"></div>
+  <!-- ---- SCAN sub-tab ---- -->
+  <div id="scanSub-scan" class="scan-subpanel active">
+    <div class="scan-input-row">
+      <input type="text" id="scanInput" placeholder="Machine ID or Part #" autocomplete="off"
+             onkeydown="if(event.key==='Enter')doLookup()">
+      <button onclick="doLookup()">Look Up</button>
+    </div>
+    <div id="scannerContainer">
+      <button class="close-scanner" onclick="toggleScanner()">X</button>
+      <div id="reader"></div>
+    </div>
+    <div id="scanResult">
+      <div class="empty" id="scanHint">
+        <button id="scanCameraBtn" onclick="toggleScanner()" style="width:110px;height:110px;border-radius:50%;background:var(--navy);color:white;border:none;cursor:pointer;margin:30px auto 20px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(26,55,97,0.35)">
+          <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/>
+            <rect x="6" y="12" width="4" height="4"/><rect x="14" y="12" width="4" height="4"/>
+          </svg>
+        </button>
+        <p style="font-size:20px;font-weight:700;margin-bottom:4px;">Tap to Scan</p>
+        <p style="font-size:14px;color:#888;margin-bottom:16px">or type above to look up</p>
+        <p><strong>Machine QR:</strong> Shows machine info + all compatible parts in stock</p>
+        <p style="margin-top:4px"><strong>Part barcode:</strong> Shows what machines it fits + where it's stored</p>
+        <p style="margin-top:12px;font-size:12px;color:#aaa">
+          Tip: Tech calls in? Ask for the machine ID on the QR sticker<br>
+          Type it here to see what parts you have for that machine
+        </p>
+      </div>
+    </div>
   </div>
 
-  <div id="scanResult">
-    <div class="empty" id="scanHint">
-      <p style="font-size:18px;margin-bottom:8px;">Scan or type to look up</p>
-      <p><strong>Machine QR:</strong> Shows machine info + all compatible parts in stock</p>
-      <p style="margin-top:4px"><strong>Part barcode:</strong> Shows what machines it fits + where it's stored</p>
-      <p style="margin-top:12px;font-size:12px;color:#aaa">
-        Tip: Tech calls in? Ask for the machine ID on the QR sticker<br>
-        Type it here to see what parts you have for that machine
-      </p>
+  <!-- ---- ADD sub-tab ---- -->
+  <div id="scanSub-add" class="scan-subpanel">
+    <div style="padding:16px">
+      <h3 style="margin:0 0 4px">Add Part to Bin</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">Scan a label barcode or type the part number, assign a bin, and generate a QR code.</p>
+
+      <label style="font-size:12px;font-weight:600;color:#888">Scan or type part number</label>
+      <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:12px">
+        <input id="addScanInput" type="text" placeholder="Part # or barcode" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:monospace" onkeydown="if(event.key==='Enter')matchAddPart()">
+        <button onclick="startAddScanner()" style="padding:10px 14px;background:var(--navy);color:white;border:none;border-radius:8px;cursor:pointer" title="Open camera">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <button onclick="matchAddPart()" style="padding:10px 14px;background:var(--green);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600">Match</button>
+      </div>
+      <div id="addScannerWrap" style="display:none;margin-bottom:12px;position:relative;border-radius:8px;overflow:hidden"><div id="addReader"></div><button onclick="stopAddScanner()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-weight:700">X</button></div>
+
+      <div id="addMatchResult"></div>
+
+      <div id="addBinSection" style="display:none">
+        <label style="font-size:12px;font-weight:600;color:#888">Bin location</label>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <input id="addBinInput" type="text" placeholder="e.g. A1, SHELF-3" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-weight:600;text-transform:uppercase;text-align:center">
+          <input id="addQtyInput" type="number" value="1" min="0" placeholder="Qty" style="width:70px;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;text-align:center">
+        </div>
+
+        <div style="margin-top:10px">
+          <label style="font-size:12px;font-weight:600;color:#888">Machine compatibility</label>
+          <div style="display:flex;gap:8px;margin-top:4px" id="addFitsChecks">
+            <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer"><input type="checkbox" value="618"> 618</label>
+            <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer"><input type="checkbox" value="900"> 900</label>
+            <label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer"><input type="checkbox" value="1200"> 1200</label>
+          </div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label style="font-size:12px;font-weight:600;color:#888">Custom QR code (optional)</label>
+          <input id="addQRInput" type="text" placeholder="Leave blank to use part number" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;box-sizing:border-box;margin-top:4px">
+        </div>
+
+        <button onclick="saveAddPart()" style="width:100%;margin-top:14px;padding:14px;background:var(--green);color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Save & Generate QR Label</button>
+        <div id="addStatus" style="font-size:12px;text-align:center;margin-top:6px;color:#888"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---- EDIT sub-tab ---- -->
+  <div id="scanSub-edit" class="scan-subpanel">
+    <div style="padding:16px">
+      <h3 style="margin:0 0 4px">Quick Edit</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:16px">Scan a QR code to quickly edit a part's bin, stock, or machine tags.</p>
+
+      <label style="font-size:12px;font-weight:600;color:#888">Scan or type to find</label>
+      <div style="display:flex;gap:6px;margin-top:4px;margin-bottom:12px">
+        <input id="editScanInput" type="text" placeholder="Part #, Machine ID, or Bin label" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-family:monospace" onkeydown="if(event.key==='Enter')doEditLookup()">
+        <button onclick="startEditScanner()" style="padding:10px 14px;background:var(--navy);color:white;border:none;border-radius:8px;cursor:pointer" title="Open camera">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <button onclick="doEditLookup()" style="padding:10px 14px;background:var(--green);color:white;border:none;border-radius:8px;cursor:pointer;font-weight:600">Find</button>
+      </div>
+      <div id="editScannerWrap" style="display:none;margin-bottom:12px;position:relative;border-radius:8px;overflow:hidden"><div id="editReader"></div><button onclick="stopEditScanner()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:white;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-weight:700">X</button></div>
+
+      <div id="editResult"></div>
     </div>
   </div>
 </div>
@@ -424,6 +506,7 @@ header .sub { font-size: 11px; opacity: 0.7; }
   <div style="padding:6px 12px;display:flex;gap:6px;flex-wrap:wrap;background:white;border-bottom:1px solid var(--border)">
     <button onclick="doSyncNow()" style="padding:6px 12px;background:var(--navy);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Sync</button>
     <button onclick="showCSVImport()" style="padding:6px 12px;background:var(--accent);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Import CSV</button>
+    <button onclick="autoTagMachines()" style="padding:6px 12px;background:var(--blue-mid);color:white;border:none;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Auto-Tag Machines</button>
   </div>
   <div id="partsList"></div>
 </div>
@@ -866,15 +949,16 @@ async function syncBins() {
   }
 }
 
-async function saveBin(partPk, bin, stockQty, notes, qrCode) {
+async function saveBin(partPk, bin, stockQty, notes, qrCode, fits) {
   if (BACKEND !== 'lite') return;
-  partBins[partPk] = { part_pk: parseInt(partPk), bin, stock_qty: stockQty, notes, qr_code: qrCode || '' };
+  const prev = partBins[partPk] || {};
+  partBins[partPk] = { part_pk: parseInt(partPk), bin, stock_qty: stockQty, notes, qr_code: qrCode || '', fits: fits !== undefined ? fits : (prev.fits || '') };
   localStorage.setItem('ugsi_bins_cache', JSON.stringify(partBins));
   try {
     await fetch(BASE + '/api/bins/' + partPk, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bin, stock_qty: stockQty, notes, qr_code: qrCode || '' }),
+      body: JSON.stringify(partBins[partPk]),
     });
   } catch(e) { console.error('Failed to save bin:', e); }
 }
@@ -1143,6 +1227,7 @@ async function init() {
     if (!cache) status.textContent = 'Offline — no server found';
   }
   await syncBins();
+  await loadRepairs();
   renderFleet();
   renderReportStats();  // Re-render now that fleet is loaded
 
@@ -1226,6 +1311,17 @@ function showTab(name, btn) {
   if (name === 'settings') updateSettingsPanel();
   if (name === 'bins') renderBinsTab();
   if (scannerActive && name !== 'scan') toggleScanner();
+}
+
+function showScanSub(sub, btn) {
+  document.querySelectorAll('.scan-subtabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.scan-subpanel').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('scanSub-' + sub).classList.add('active');
+  // Stop any active scanners when switching sub-tabs
+  if (scannerActive) toggleScanner();
+  stopAddScanner();
+  stopEditScanner();
 }
 
 // ============================================================
@@ -1323,12 +1419,13 @@ function renderMachineResult(machine, el) {
   const job = machine.job ? jobs[machine.job] : null;
   const family = machine.family;
 
-  // Find compatible parts
+  // Find compatible parts (stored fits tag OR text match fallback)
   const compat = allParts.filter(p => {
-    const notes = (p.notes || '').toLowerCase();
-    const desc = (p.description || '').toLowerCase();
+    const storedFits = (partBins[p.pk]?.fits || '');
+    if (storedFits) return storedFits.includes(family);
     const name = (p.name || '').toLowerCase();
-    return notes.includes(family) || name.includes(family) || desc.includes('/' + family) || desc.includes(family + '/');
+    const desc = (p.description || '').toLowerCase();
+    return name.includes(family) || desc.includes(family);
   });
 
   // Group by category
@@ -1492,15 +1589,16 @@ function renderPartResult(part, el) {
   const price = (part.description || '').match(/\$([\d,.]+)/);
   const isLow = stock.total <= (part.minimum_stock || 0);
 
-  // Find which machines it fits
-  const notes = (part.notes || '').toLowerCase();
-  const desc = (part.description || '').toLowerCase();
-  const name = (part.name || '').toLowerCase();
-  const fits = [];
-  ['618', '900', '1200'].forEach(f => {
-    if (notes.includes(f) || name.includes(f) || desc.includes('/' + f) || desc.includes(f + '/'))
-      fits.push(f);
-  });
+  // Find which machines it fits (stored tag > text fallback)
+  const bd = partBins[part.pk] || {};
+  const storedFits = (bd.fits || '').split(',').filter(Boolean);
+  let fits = storedFits;
+  if (fits.length === 0) {
+    const name = (part.name || '').toLowerCase();
+    const desc = (part.description || '').toLowerCase();
+    fits = [];
+    ['618', '900', '1200'].forEach(f => { if (name.includes(f) || desc.includes(f)) fits.push(f); });
+  }
 
   const qrText = getPartQR(part);
 
@@ -1739,43 +1837,141 @@ function renderBinsTab() {
     const bd = partBins[p.pk];
     if (!bd || !bd.bin) return;
     const bin = bd.bin.toUpperCase();
-    if (q && !bin.toLowerCase().includes(q)) return;
-    if (!binGroups[bin]) binGroups[bin] = { parts: [], totalQty: 0, notes: [] };
+    if (q && !bin.toLowerCase().includes(q) && !(p.name||'').toLowerCase().includes(q)) return;
+    if (!binGroups[bin]) binGroups[bin] = { parts: [], totalQty: 0 };
     binGroups[bin].parts.push(p);
     binGroups[bin].totalQty += (bd.stock_qty || 0);
-    if (bd.notes && !binGroups[bin].notes.includes(bd.notes)) binGroups[bin].notes.push(bd.notes);
   });
 
   const bins = Object.keys(binGroups).sort();
   if (bins.length === 0) {
-    el.innerHTML = '<div class="empty"><p>No bins assigned yet.</p>' +
-      '<p style="font-size:13px;color:#888;margin-top:8px">Scan or search a part, then set its bin location.<br>Or tap <strong>+ Assign Bin</strong> above.</p></div>';
+    el.innerHTML = '<div class="empty"><p>No bins assigned yet.</p><p style="font-size:13px;color:#888;margin-top:8px">Tap <strong>+ Assign Bin</strong> above to start.</p></div>';
     return;
   }
 
   let html = '';
   bins.forEach(bin => {
     const g = binGroups[bin];
-    html += '<div class="card" onclick="showBinDetail(\'' + esc(bin) + '\')" style="cursor:pointer">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center">' +
+    html += '<div class="card machine-card" onclick="showBinDetail(\'' + esc(bin) + '\')">' +
+      '<div class="row">' +
       '<div>' +
-      '<div style="font-size:18px;font-weight:700;color:var(--accent)">' + esc(bin) + '</div>' +
-      '<div style="font-size:13px;color:#666">' + g.parts.length + ' part' + (g.parts.length !== 1 ? 's' : '') +
-      (g.notes.length > 0 ? ' &middot; ' + esc(g.notes[0]) : '') + '</div>' +
+      '<div class="card-title" style="font-size:18px;color:var(--accent)">' + esc(bin) + '</div>' +
+      '<div class="card-sub">' + g.parts.length + ' part' + (g.parts.length !== 1 ? 's' : '') + '</div>' +
       '</div>' +
-      '<div style="text-align:right">' +
-      '<div style="font-size:20px;font-weight:700;color:var(--green)">' + g.totalQty + '</div>' +
-      '<div style="font-size:11px;color:#888">total qty</div>' +
-      '</div></div></div>';
+      '<span class="card-badge badge-ok" style="font-size:16px;font-weight:700">' + g.totalQty + '</span>' +
+      '</div>' +
+      '<div class="quick-actions">' +
+      '<button onclick="showBinDetail(\'' + esc(bin) + '\');event.stopPropagation()">View</button>' +
+      '<button onclick="editBin(\'' + esc(bin) + '\');event.stopPropagation()" style="background:var(--navy-light);color:var(--navy)">Edit</button>' +
+      '<button onclick="deleteBin(\'' + esc(bin) + '\');event.stopPropagation()" style="background:var(--red);color:var(--red-text)">Delete</button>' +
+      '<button onclick="printSingleLabel(\'' + esc(bin) + '\',\'Bin ' + esc(bin) + '\',\'bin\');event.stopPropagation()" style="background:var(--accent-light);color:var(--accent-dark)">QR</button>' +
+      '</div></div>';
   });
   el.innerHTML = html;
 }
 
 function showBinDetail(binLabel) {
   const parts = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === binLabel.toUpperCase());
-  document.getElementById('scanInput').value = binLabel;
-  showTab('scan', document.querySelector('.tab-bar button'));
-  renderBinResult(binLabel, parts, document.getElementById('scanResult'));
+  const totalQty = parts.reduce((s, p) => s + (partBins[p.pk]?.stock_qty || 0), 0);
+  let html = '<div style="padding:20px">';
+  html += '<h3 style="margin:0 0 4px;color:var(--accent)">Bin ' + esc(binLabel) + '</h3>';
+  html += '<div style="font-size:13px;color:#666;margin-bottom:16px">' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + ' &middot; ' + totalQty + ' total qty</div>';
+
+  parts.forEach(p => {
+    const bd = partBins[p.pk] || {};
+    const fits = (bd.fits || '').split(',').filter(Boolean);
+    html += '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:white">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><div style="font-weight:600;font-size:14px">' + esc(p.name) + '</div>';
+    if (p.IPN) html += '<div style="font-family:monospace;font-size:12px;color:#888">' + esc(p.IPN) + '</div>';
+    if (fits.length) html += '<div style="font-size:11px;color:var(--blue-mid);font-weight:600">Fits: ' + fits.join(', ') + '</div>';
+    html += '</div>';
+    html += '<div style="text-align:right"><div style="font-size:18px;font-weight:700;color:var(--green)">' + (bd.stock_qty || 0) + '</div></div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px">';
+    html += '<button onclick="closeModal();quickStockAdj(' + p.pk + ',1)" style="flex:1;padding:6px;background:var(--green);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">+ Stock</button>';
+    html += '<button onclick="closeModal();quickStockAdj(' + p.pk + ',-1)" style="flex:1;padding:6px;background:#888;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">- Stock</button>';
+    html += '<button onclick="closeModal();quickBinEdit(' + p.pk + ')" style="flex:1;padding:6px;background:var(--accent);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Edit</button>';
+    html += '<button onclick="removeBinPart(' + p.pk + ',\'' + esc(binLabel) + '\')" style="padding:6px 10px;background:#B71C1C;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Remove</button>';
+    html += '</div></div>';
+  });
+
+  html += '<button onclick="closeModal()" style="width:100%;margin-top:12px;padding:12px;background:#888;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Close</button>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function removeBinPart(partPk, binLabel) {
+  if (!confirm('Remove this part from Bin ' + binLabel + '?')) return;
+  await saveBin(partPk, '', 0, '', '', '');
+  closeModal();
+  renderBinsTab();
+  // Reopen if bin still has parts
+  const remaining = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === binLabel.toUpperCase());
+  if (remaining.length > 0) showBinDetail(binLabel);
+}
+
+function editBin(binLabel) {
+  const parts = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === binLabel.toUpperCase());
+  const totalQty = parts.reduce((s, p) => s + (partBins[p.pk]?.stock_qty || 0), 0);
+  const firstNote = parts.map(p => (partBins[p.pk]?.notes || '')).find(n => n) || '';
+  const firstQR = parts.map(p => (partBins[p.pk]?.qr_code || '')).find(n => n) || '';
+
+  let html = '<div style="padding:20px">';
+  html += '<h3 style="margin:0 0 16px">Edit Bin</h3>';
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Bin Label</label>';
+  html += '<input id="ebLabel" value="' + esc(binLabel) + '" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:18px;font-weight:700;text-transform:uppercase;text-align:center;box-sizing:border-box;margin:4px 0 12px">';
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Notes (applies to all parts in bin)</label>';
+  html += '<input id="ebNotes" value="' + esc(firstNote) + '" placeholder="Optional" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 12px">';
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Custom QR Code</label>';
+  html += '<input id="ebQR" value="' + esc(firstQR) + '" placeholder="Default: ' + esc(binLabel) + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;box-sizing:border-box;margin:4px 0 12px">';
+  html += '<div style="font-size:13px;color:#666;margin-bottom:16px">' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + ' &middot; ' + totalQty + ' total qty</div>';
+
+  // List parts with individual qty edit
+  parts.forEach(p => {
+    const bd = partBins[p.pk] || {};
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid var(--border)">';
+    html += '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name) + '</div>';
+    if (p.IPN) html += '<div style="font-size:11px;color:#888;font-family:monospace">' + esc(p.IPN) + '</div>';
+    html += '</div>';
+    html += '<input type="number" id="ebQty' + p.pk + '" value="' + (bd.stock_qty || 0) + '" min="0" style="width:60px;padding:8px;text-align:center;border:1px solid var(--border);border-radius:6px;font-size:14px;font-weight:700;margin-left:8px">';
+    html += '</div>';
+  });
+
+  html += '<button onclick="saveEditBin(\'' + esc(binLabel) + '\')" style="width:100%;margin-top:16px;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Save</button>';
+  html += '<div id="ebStatus" style="text-align:center;font-size:12px;margin-top:8px"></div>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function saveEditBin(oldLabel) {
+  const newLabel = (document.getElementById('ebLabel').value || '').trim().toUpperCase();
+  const notes = (document.getElementById('ebNotes').value || '').trim();
+  const qr = (document.getElementById('ebQR').value || '').trim();
+  if (!newLabel) { alert('Bin label cannot be empty'); return; }
+
+  const parts = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === oldLabel.toUpperCase());
+  for (const p of parts) {
+    const bd = partBins[p.pk] || {};
+    const qtyEl = document.getElementById('ebQty' + p.pk);
+    const qty = qtyEl ? (parseFloat(qtyEl.value) || 0) : (bd.stock_qty || 0);
+    await saveBin(p.pk, newLabel, qty, notes, qr, bd.fits || '');
+  }
+
+  document.getElementById('ebStatus').textContent = 'Saved';
+  document.getElementById('ebStatus').style.color = 'var(--green)';
+  setTimeout(() => { closeModal(); renderBinsTab(); }, 600);
+}
+
+function deleteBin(binLabel) {
+  const parts = allParts.filter(p => (partBins[p.pk]?.bin || '').toUpperCase() === binLabel.toUpperCase());
+  if (!confirm('Delete bin "' + binLabel + '"? This removes ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + ' from this bin.')) return;
+  parts.forEach(p => {
+    saveBin(p.pk, '', 0, '', '', '');
+  });
+  renderBinsTab();
 }
 
 function showAddBinModal() {
@@ -1826,6 +2022,248 @@ async function saveAddBin() {
   await saveBin(pk, bin, qty, notes, '');
   closeModal();
   renderBinsTab();
+}
+
+// ============================================================
+// ADD SUB-TAB (inline scan → match → bin → QR)
+// ============================================================
+let addScanner = null;
+function startAddScanner() {
+  const wrap = document.getElementById('addScannerWrap');
+  wrap.style.display = 'block';
+  addScanner = new Html5Qrcode('addReader');
+  addScanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    (text) => {
+      document.getElementById('addScanInput').value = text;
+      stopAddScanner();
+      matchAddPart();
+    },
+    () => {}
+  ).catch(err => {
+    wrap.style.display = 'none';
+    alert('Camera error: ' + err);
+  });
+}
+function stopAddScanner() {
+  if (addScanner) { addScanner.stop().catch(() => {}); addScanner = null; }
+  const w = document.getElementById('addScannerWrap');
+  if (w) w.style.display = 'none';
+}
+
+function matchAddPart() {
+  const raw = (document.getElementById('addScanInput').value || '').trim();
+  if (!raw) return;
+  const q = raw.toUpperCase();
+  const resultEl = document.getElementById('addMatchResult');
+  const binSection = document.getElementById('addBinSection');
+
+  let part = allParts.find(p => (p.IPN || '').toUpperCase() === q);
+  if (!part) part = allParts.find(p => (p.IPN || '').toUpperCase().includes(q));
+  if (!part) {
+    const ql = raw.toLowerCase();
+    part = allParts.find(p => (p.name || '').toLowerCase().includes(ql));
+  }
+
+  if (part) {
+    const cat = allCategories[part.category] || '';
+    const bd = partBins[part.pk] || {};
+    resultEl.innerHTML =
+      '<div style="background:var(--navy-light);border:1px solid var(--navy);border-radius:8px;padding:10px">' +
+      '<div style="font-weight:700;color:var(--navy)">' + esc(part.name) + '</div>' +
+      '<div style="font-size:12px;color:#666;margin-top:2px">IPN: ' + esc(part.IPN || 'N/A') + ' &middot; ' + esc(cat) + '</div>' +
+      (bd.bin ? '<div style="font-size:12px;color:var(--accent);margin-top:2px">Currently in Bin: ' + esc(bd.bin) + ' (qty ' + (bd.stock_qty||0) + ')</div>' : '') +
+      '</div>';
+    resultEl.dataset.pk = part.pk;
+    binSection.style.display = 'block';
+    if (bd.bin) document.getElementById('addBinInput').value = bd.bin;
+    if (bd.stock_qty) document.getElementById('addQtyInput').value = bd.stock_qty;
+    const fits = (bd.fits || '').split(',').filter(Boolean);
+    document.querySelectorAll('#addFitsChecks input[type=checkbox]').forEach(cb => {
+      cb.checked = fits.includes(cb.value);
+    });
+  } else {
+    resultEl.innerHTML =
+      '<div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:10px">' +
+      '<div style="font-weight:600;color:#e65100">No match for "' + esc(raw) + '"</div>' +
+      '<div style="font-size:12px;color:#666;margin-top:4px">Try a different search or pick from closest matches:</div>' +
+      '</div>';
+    const ql = raw.toLowerCase();
+    const close = allParts.filter(p =>
+      (p.IPN || '').toLowerCase().includes(ql) ||
+      (p.name || '').toLowerCase().includes(ql)
+    ).slice(0, 5);
+    if (close.length > 0) {
+      resultEl.innerHTML += '<div style="margin-top:6px">' +
+        close.map(p => '<div onclick="selectAddPart(' + p.pk + ')" style="padding:8px;border-bottom:1px solid #eee;cursor:pointer;border-radius:4px;font-size:13px" onmouseover="this.style.background=\'var(--navy-light)\'" onmouseout="this.style.background=\'none\'">' +
+          '<strong>' + esc(p.name) + '</strong> <span style="color:#888;font-family:monospace">' + esc(p.IPN||'') + '</span></div>').join('') +
+        '</div>';
+    }
+    resultEl.dataset.pk = '';
+    binSection.style.display = 'none';
+  }
+}
+
+function selectAddPart(pk) {
+  const part = allParts.find(p => p.pk === pk);
+  if (!part) return;
+  document.getElementById('addScanInput').value = part.IPN || part.name;
+  matchAddPart();
+}
+
+async function saveAddPart() {
+  const pk = document.getElementById('addMatchResult').dataset.pk;
+  if (!pk) { alert('Match a part first.'); return; }
+  const bin = (document.getElementById('addBinInput').value || '').trim().toUpperCase();
+  const qty = parseFloat(document.getElementById('addQtyInput').value) || 0;
+  const customQR = (document.getElementById('addQRInput').value || '').trim();
+  if (!bin) { alert('Enter a bin label.'); return; }
+
+  const fits = [];
+  document.querySelectorAll('#addFitsChecks input[type=checkbox]:checked').forEach(cb => fits.push(cb.value));
+
+  const statusEl = document.getElementById('addStatus');
+  statusEl.textContent = 'Saving...';
+  statusEl.style.color = '#888';
+
+  await saveBin(parseInt(pk), bin, qty, '', customQR, fits.join(','));
+  statusEl.textContent = 'Saved! Opening QR label...';
+  statusEl.style.color = 'var(--green)';
+
+  const part = allParts.find(p => p.pk === parseInt(pk));
+  const qrText = customQR || (part ? (part.IPN || part.name) : pk);
+  setTimeout(() => {
+    printSingleLabel(qrText, part ? part.name : 'Part ' + pk, 'part');
+    filterParts();
+    // Reset form for next part
+    document.getElementById('addScanInput').value = '';
+    document.getElementById('addMatchResult').innerHTML = '';
+    document.getElementById('addBinSection').style.display = 'none';
+    statusEl.textContent = '';
+  }, 800);
+}
+
+// ============================================================
+// EDIT SUB-TAB (scan → find → inline edit)
+// ============================================================
+let editScanner = null;
+function startEditScanner() {
+  const wrap = document.getElementById('editScannerWrap');
+  wrap.style.display = 'block';
+  editScanner = new Html5Qrcode('editReader');
+  editScanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 250, height: 150 } },
+    (text) => {
+      document.getElementById('editScanInput').value = text;
+      stopEditScanner();
+      doEditLookup();
+    },
+    () => {}
+  ).catch(err => {
+    wrap.style.display = 'none';
+    alert('Camera error: ' + err);
+  });
+}
+function stopEditScanner() {
+  if (editScanner) { editScanner.stop().catch(() => {}); editScanner = null; }
+  const w = document.getElementById('editScannerWrap');
+  if (w) w.style.display = 'none';
+}
+
+function doEditLookup() {
+  const raw = (document.getElementById('editScanInput').value || '').trim();
+  if (!raw) return;
+  const q = raw.toUpperCase();
+  const el = document.getElementById('editResult');
+
+  // Try machine match
+  const machines = loadMachines();
+  let machine = Object.values(machines).find(m => (m.qr_code || '').toUpperCase() === q);
+  if (!machine) machine = machines[q] || machines[raw];
+  if (!machine) {
+    const match = Object.keys(machines).find(k => k.toUpperCase().includes(q));
+    if (match) machine = machines[match];
+  }
+  if (machine) {
+    const bd = partBins[machine.pk] || {};
+    el.innerHTML =
+      '<div style="background:var(--navy-light);border:1px solid var(--navy);border-radius:8px;padding:12px;margin-bottom:8px">' +
+      '<div style="font-weight:700;font-size:16px;color:var(--navy)">' + esc(machine.id) + '</div>' +
+      '<div style="font-size:13px;color:#666">' + esc(machine.model) + ' &middot; ' + esc(machine.status) + '</div>' +
+      '</div>' +
+      '<button onclick="showEditMachine(\'' + esc(machine.id) + '\')" style="width:100%;padding:12px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:6px">Edit Machine</button>' +
+      '<button onclick="printSingleLabel(\'' + esc(getMachineQR(machine)) + '\',\'' + esc(machine.model + ' ' + machine.id) + '\',\'machine\')" style="width:100%;padding:12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Print QR Label</button>';
+    return;
+  }
+
+  // Try part match
+  let part = allParts.find(p => {
+    const bd = partBins[p.pk] || {};
+    return bd.qr_code && bd.qr_code.toUpperCase() === q;
+  });
+  if (!part) part = allParts.find(p => (p.IPN || '').toUpperCase() === q);
+  if (!part) part = allParts.find(p => (p.IPN || '').toUpperCase().includes(q));
+  if (!part) {
+    const ql = raw.toLowerCase();
+    part = allParts.find(p => (p.name || '').toLowerCase().includes(ql));
+  }
+
+  if (part) {
+    const cat = allCategories[part.category] || '';
+    const bd = partBins[part.pk] || {};
+    const fits = (bd.fits || '').split(',').filter(Boolean);
+    el.innerHTML =
+      '<div style="background:var(--navy-light);border:1px solid var(--navy);border-radius:8px;padding:12px;margin-bottom:12px">' +
+      '<div style="font-weight:700;color:var(--navy)">' + esc(part.name) + '</div>' +
+      '<div style="font-size:12px;color:#666;margin-top:2px">IPN: ' + esc(part.IPN || 'N/A') + ' &middot; ' + esc(cat) + '</div>' +
+      (bd.bin ? '<div style="font-size:12px;color:var(--accent);margin-top:2px">Bin: ' + esc(bd.bin) + ' &middot; Qty: ' + (bd.stock_qty||0) + '</div>' : '') +
+      (fits.length ? '<div style="font-size:12px;color:var(--blue-mid);font-style:italic;margin-top:2px">Fits: ' + fits.join(', ') + '</div>' : '') +
+      '</div>' +
+
+      '<label style="font-size:12px;font-weight:600;color:#888">Bin</label>' +
+      '<div style="display:flex;gap:6px;margin-top:4px">' +
+      '<input id="editBin" value="' + esc(bd.bin || '') + '" placeholder="Bin label" style="flex:1;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;font-weight:600;text-transform:uppercase;text-align:center">' +
+      '<input id="editQty" type="number" value="' + (bd.stock_qty || 0) + '" min="0" style="width:70px;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:15px;text-align:center">' +
+      '</div>' +
+
+      '<div style="margin-top:10px"><label style="font-size:12px;font-weight:600;color:#888">Machine compatibility</label>' +
+      '<div style="display:flex;gap:8px;margin-top:4px" id="editFitsChecks">' +
+      ['618','900','1200'].map(f =>
+        '<label style="display:flex;align-items:center;gap:4px;padding:6px 12px;border:2px solid var(--border);border-radius:8px;cursor:pointer"><input type="checkbox" value="' + f + '"' + (fits.includes(f) ? ' checked' : '') + '> ' + f + '</label>'
+      ).join('') +
+      '</div></div>' +
+
+      '<div style="margin-top:10px"><label style="font-size:12px;font-weight:600;color:#888">Custom QR</label>' +
+      '<input id="editQR" value="' + esc(bd.qr_code || '') + '" placeholder="Default: ' + esc(part.IPN || part.name) + '" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:monospace;box-sizing:border-box;margin-top:4px"></div>' +
+
+      '<button onclick="saveEditPart(' + part.pk + ')" style="width:100%;margin-top:14px;padding:14px;background:var(--green);color:white;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer">Save</button>' +
+      '<button onclick="printSingleLabel(\'' + esc(getPartQR(part)) + '\',\'' + esc(part.name) + '\',\'part\')" style="width:100%;margin-top:6px;padding:12px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">Print QR Label</button>' +
+      '<div id="editStatus" style="font-size:12px;text-align:center;margin-top:6px;color:#888"></div>';
+    return;
+  }
+
+  el.innerHTML = '<div style="background:var(--red);border-radius:8px;padding:12px;text-align:center">' +
+    '<div style="font-weight:600;color:var(--red-text)">No match for "' + esc(raw) + '"</div>' +
+    '<div style="font-size:12px;color:#666;margin-top:4px">Try a machine ID, part number, or QR code</div></div>';
+}
+
+async function saveEditPart(pk) {
+  const bin = (document.getElementById('editBin').value || '').trim().toUpperCase();
+  const qty = parseFloat(document.getElementById('editQty').value) || 0;
+  const customQR = (document.getElementById('editQR').value || '').trim();
+  const fits = [];
+  document.querySelectorAll('#editFitsChecks input[type=checkbox]:checked').forEach(cb => fits.push(cb.value));
+
+  const statusEl = document.getElementById('editStatus');
+  statusEl.textContent = 'Saving...';
+  statusEl.style.color = '#888';
+
+  await saveBin(pk, bin, qty, '', customQR, fits.join(','));
+  statusEl.textContent = 'Saved!';
+  statusEl.style.color = 'var(--green)';
+  filterParts();
 }
 
 // ============================================================
@@ -2172,6 +2610,7 @@ function renderFleet() {
           '<button class="' + (m.status==='Field'?'field-status':'') + '" onclick="quickSetStatus(\'' + esc(m.id) + '\',\'Field\',event)">Field</button>' +
           '<button class="' + (m.status==='Needs Repair'?'repair-status':'') + '" onclick="quickSetStatus(\'' + esc(m.id) + '\',\'Needs Repair\',event)">Repair</button>' +
           '<button onclick="showEditMachine(\'' + esc(m.id) + '\');event.stopPropagation()" style="background:var(--navy-light);color:var(--navy)">Edit</button>' +
+          '<button onclick="printSingleLabel(\'' + esc(getMachineQR(m)) + '\',\'' + esc(m.model + ' ' + m.id) + '\',\'machine\');event.stopPropagation()" style="background:var(--accent-light);color:var(--accent-dark)">QR</button>' +
         '</div>' +
         '</div>';
     });
@@ -2287,6 +2726,8 @@ function showEditMachine(id) {
     '</div>' +
 
     '<button class="save-btn" onclick="saveMachine(\'' + esc(id) + '\')" style="font-size:16px;padding:14px">Save Changes</button>' +
+    '<button onclick="closeModal();showNewRepairOrder(\'' + esc(id) + '\')" style="width:100%;margin-top:8px;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">New Repair Order</button>' +
+    '<button onclick="closeModal();showMachineRepairs(\'' + esc(id) + '\')" style="width:100%;margin-top:6px;padding:10px;background:white;color:var(--navy);border:2px solid var(--navy);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">View Repair History</button>' +
     '<button class="close-btn" onclick="closeModal()" style="background:#888;margin-top:8px">Cancel</button>' +
     '<button class="danger-btn" onclick="deleteMachine(\'' + esc(id) + '\')" style="margin-top:12px">Delete Machine</button>';
   openModal();
@@ -2488,6 +2929,292 @@ function deleteJob(id) {
 }
 
 // ============================================================
+// REPAIR ORDERS
+// ============================================================
+let allRepairs = [];
+
+async function loadRepairs() {
+  if (BACKEND !== 'lite') return;
+  try {
+    const r = await fetch(BASE + '/api/repairs');
+    if (r.ok) allRepairs = await r.json();
+  } catch(e) {}
+}
+
+function showNewRepairOrder(machineId) {
+  const m = allMachines[machineId] || {};
+  const today = new Date().toISOString().split('T')[0];
+  const types = ['PM', 'Hydraulic', 'Track', 'Facer', 'Heater', 'Engine', 'Electrical', 'Other'];
+
+  let html = '<div style="padding:20px">';
+  html += '<h3 style="margin:0 0 4px">New Repair Order</h3>';
+  html += '<div style="font-size:13px;color:#666;margin-bottom:16px">' + esc(machineId) + ' — ' + esc(m.model || '') + '</div>';
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Repair Type</label>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px">';
+  types.forEach(t => {
+    html += '<button type="button" onclick="this.parentElement.querySelectorAll(\'button\').forEach(b=>b.style.background=\'white\');this.style.background=\'var(--navy-light)\';document.getElementById(\'roType\').value=\'' + t + '\'" style="padding:8px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:white">' + t + '</button>';
+  });
+  html += '</div><input type="hidden" id="roType" value="PM">';
+
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Problem / Complaint</label>';
+  html += '<textarea id="roComplaint" rows="3" placeholder="What\'s wrong? What does the tech report?" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 12px;font-family:inherit"></textarea>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+  html += '<div><label style="font-size:12px;font-weight:600;color:#888">Our Labor Rate ($/hr)</label>';
+  html += '<input id="roRate" type="number" value="110" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>';
+  html += '<div><label style="font-size:12px;font-weight:600;color:#888">Outside Shop Rate ($/hr)</label>';
+  html += '<input id="roOutRate" type="number" value="150" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>';
+  html += '</div>';
+
+  html += '<button onclick="createRepairOrder(\'' + esc(machineId) + '\')" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Create Repair Order</button>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function createRepairOrder(machineId) {
+  const today = new Date().toISOString().split('T')[0];
+  const orderId = 'RO-' + Date.now();
+  const data = {
+    id: orderId,
+    machine_id: machineId,
+    date_opened: today,
+    repair_type: document.getElementById('roType').value,
+    complaint: document.getElementById('roComplaint').value.trim(),
+    labor_rate: parseFloat(document.getElementById('roRate').value) || 110,
+    outside_rate: parseFloat(document.getElementById('roOutRate').value) || 150,
+    status: 'Draft',
+  };
+
+  if (BACKEND === 'lite') {
+    try {
+      await fetch(BASE + '/api/repairs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } catch(e) {}
+  }
+
+  // Also store locally
+  allRepairs.push(data);
+  localStorage.setItem('ugsi_repairs', JSON.stringify(allRepairs));
+  closeModal();
+  showRepairOrder(orderId);
+}
+
+async function showRepairOrder(orderId) {
+  let order = allRepairs.find(r => r.id === orderId);
+  let items = [];
+
+  if (BACKEND === 'lite') {
+    try {
+      const r = await fetch(BASE + '/api/repairs/' + encodeURIComponent(orderId));
+      if (r.ok) {
+        order = await r.json();
+        items = order.items || [];
+      }
+    } catch(e) {}
+  }
+  if (!order) return;
+
+  const m = allMachines[order.machine_id] || {};
+  const partsCost = items.filter(i => i.item_type === 'part').reduce((s, i) => s + (i.qty * i.unit_cost), 0);
+  const laborCost = (order.labor_hours || 0) * (order.labor_rate || 110);
+  const outsideCost = (order.outside_hours || 0) * (order.outside_rate || 150);
+  const ourTotal = partsCost + laborCost;
+  const outsideTotal = partsCost + outsideCost;
+
+  const statusColors = { Draft: '#888', Approved: 'var(--blue-mid)', 'In Progress': 'var(--accent)', Complete: 'var(--green)' };
+
+  let html = '<div style="padding:20px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html += '<h3 style="margin:0">' + esc(order.id) + '</h3>';
+  html += '<span style="padding:4px 12px;border-radius:12px;font-size:12px;font-weight:700;background:' + (statusColors[order.status] || '#888') + ';color:white">' + esc(order.status) + '</span>';
+  html += '</div>';
+
+  html += '<div style="font-size:13px;color:#666;margin-bottom:16px">';
+  html += esc(order.machine_id) + ' — ' + esc(m.model || '') + '<br>';
+  html += esc(order.repair_type || '') + ' &middot; Opened ' + esc(order.date_opened || '');
+  html += '</div>';
+
+  // Complaint / Work
+  html += '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;background:var(--gray)">';
+  html += '<div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px">COMPLAINT</div>';
+  html += '<div style="font-size:13px">' + esc(order.complaint || 'None') + '</div>';
+  html += '</div>';
+
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Work Performed</label>';
+  html += '<textarea id="roWork" rows="2" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 12px;font-family:inherit">' + esc(order.work_performed || '') + '</textarea>';
+
+  // Parts line items
+  html += '<div style="font-size:12px;font-weight:600;color:#888;margin-bottom:6px">PARTS</div>';
+  if (items.filter(i => i.item_type === 'part').length > 0) {
+    items.filter(i => i.item_type === 'part').forEach(i => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">';
+      html += '<div>' + esc(i.part_name) + (i.part_ipn ? ' <span style="color:#888;font-family:monospace;font-size:11px">' + esc(i.part_ipn) + '</span>' : '') + '</div>';
+      html += '<div style="text-align:right;white-space:nowrap">' + i.qty + ' x $' + (i.unit_cost || 0).toFixed(2) + ' = <strong>$' + (i.qty * i.unit_cost).toFixed(2) + '</strong>';
+      html += ' <button onclick="deleteRepairItem(' + i.id + ',\'' + esc(orderId) + '\')" style="margin-left:4px;padding:2px 6px;background:#B71C1C;color:white;border:none;border-radius:4px;font-size:10px;cursor:pointer">x</button>';
+      html += '</div></div>';
+    });
+  }
+  html += '<button onclick="showAddRepairPart(\'' + esc(orderId) + '\')" style="width:100%;margin:8px 0 16px;padding:10px;background:white;border:2px dashed var(--border);border-radius:8px;font-size:13px;color:var(--blue-mid);font-weight:600;cursor:pointer">+ Add Part</button>';
+
+  // Labor
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">';
+  html += '<div><label style="font-size:12px;font-weight:600;color:#888">Our Labor Hours</label>';
+  html += '<input id="roHours" type="number" value="' + (order.labor_hours || 0) + '" min="0" step="0.5" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>';
+  html += '<div><label style="font-size:12px;font-weight:600;color:#888">Outside Shop Hours</label>';
+  html += '<input id="roOutHours" type="number" value="' + (order.outside_hours || 0) + '" min="0" step="0.5" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box"></div>';
+  html += '</div>';
+
+  // Constraint notes
+  html += '<label style="font-size:12px;font-weight:600;color:#888">Equipment Constraints</label>';
+  html += '<input id="roConstraints" value="' + esc(order.constraint_notes || '') + '" placeholder="e.g. no fixed gantry, movable cranes only" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 16px">';
+
+  // Cost comparison
+  html += '<div style="border:2px solid var(--navy);border-radius:10px;overflow:hidden;margin-bottom:16px">';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;font-size:13px">';
+  html += '<div style="padding:12px;background:var(--navy);color:white;font-weight:700;text-align:center">Our Shop</div>';
+  html += '<div style="padding:12px;background:var(--accent);color:white;font-weight:700;text-align:center">Specialized Shop</div>';
+  html += '<div style="padding:8px 12px;border-right:1px solid var(--border)">Parts: $' + partsCost.toFixed(2) + '</div>';
+  html += '<div style="padding:8px 12px">Parts: $' + partsCost.toFixed(2) + '</div>';
+  html += '<div style="padding:8px 12px;border-right:1px solid var(--border)">Labor: ' + (order.labor_hours || 0) + 'h x $' + (order.labor_rate || 110) + ' = $' + laborCost.toFixed(2) + '</div>';
+  html += '<div style="padding:8px 12px">Labor: ' + (order.outside_hours || 0) + 'h x $' + (order.outside_rate || 150) + ' = $' + outsideCost.toFixed(2) + '</div>';
+  html += '<div style="padding:12px;border-right:1px solid var(--border);border-top:2px solid var(--border);font-weight:700;font-size:16px;text-align:center;color:var(--navy)">$' + ourTotal.toFixed(2) + '</div>';
+  html += '<div style="padding:12px;border-top:2px solid var(--border);font-weight:700;font-size:16px;text-align:center;color:var(--accent)">$' + outsideTotal.toFixed(2) + '</div>';
+  html += '</div></div>';
+
+  // Status buttons
+  html += '<div style="display:flex;gap:6px;margin-bottom:12px">';
+  ['Draft', 'Approved', 'In Progress', 'Complete'].forEach(s => {
+    const active = order.status === s;
+    html += '<button onclick="updateRepairStatus(\'' + esc(orderId) + '\',\'' + s + '\')" style="flex:1;padding:8px;border:2px solid ' + (statusColors[s] || '#888') + ';border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;background:' + (active ? (statusColors[s] || '#888') : 'white') + ';color:' + (active ? 'white' : (statusColors[s] || '#888')) + '">' + s + '</button>';
+  });
+  html += '</div>';
+
+  html += '<button onclick="saveRepairOrder(\'' + esc(orderId) + '\')" style="width:100%;padding:14px;background:var(--green);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Save Repair Order</button>';
+  html += '<button onclick="closeModal()" style="width:100%;margin-top:6px;padding:10px;background:#888;color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer">Close</button>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+async function saveRepairOrder(orderId) {
+  const data = {
+    work_performed: document.getElementById('roWork').value.trim(),
+    labor_hours: parseFloat(document.getElementById('roHours').value) || 0,
+    outside_hours: parseFloat(document.getElementById('roOutHours').value) || 0,
+    constraint_notes: document.getElementById('roConstraints').value.trim(),
+  };
+
+  if (BACKEND === 'lite') {
+    try {
+      await fetch(BASE + '/api/repairs/' + encodeURIComponent(orderId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } catch(e) {}
+  }
+  closeModal();
+  await loadRepairs();
+  showRepairOrder(orderId);
+}
+
+async function updateRepairStatus(orderId, status) {
+  if (BACKEND === 'lite') {
+    try {
+      await fetch(BASE + '/api/repairs/' + encodeURIComponent(orderId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    } catch(e) {}
+  }
+  await loadRepairs();
+  showRepairOrder(orderId);
+}
+
+function showAddRepairPart(orderId) {
+  let html = '<div style="padding:20px">';
+  html += '<h3 style="margin:0 0 12px">Add Part to Repair</h3>';
+  html += '<input id="rpSearch" type="text" placeholder="Search parts..." oninput="filterRepairParts(\'' + esc(orderId) + '\')" style="width:100%;padding:10px;border:2px solid var(--border);border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px">';
+  html += '<div id="rpResults" style="max-height:300px;overflow-y:auto"></div>';
+  html += '<button onclick="showRepairOrder(\'' + esc(orderId) + '\')" style="width:100%;margin-top:12px;padding:10px;background:#888;color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer">Back to Order</button>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('rpSearch').focus();
+}
+
+function filterRepairParts(orderId) {
+  const q = (document.getElementById('rpSearch').value || '').toLowerCase();
+  if (q.length < 2) { document.getElementById('rpResults').innerHTML = '<div style="color:#888;font-size:13px;padding:8px">Type at least 2 characters...</div>'; return; }
+  const matches = allParts.filter(p =>
+    (p.name||'').toLowerCase().includes(q) || (p.IPN||'').toLowerCase().includes(q)
+  ).slice(0, 20);
+
+  let html = '';
+  matches.forEach(p => {
+    const price = (p.description || '').match(/\$([\d,.]+)/);
+    const cost = price ? parseFloat(price[1].replace(',', '')) : 0;
+    const bd = partBins[p.pk] || {};
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="addRepairPart(\'' + esc(orderId) + '\',' + p.pk + ',\'' + esc(p.name) + '\',\'' + esc(p.IPN || '') + '\',' + cost + ')">';
+    html += '<div><div style="font-weight:600;font-size:13px">' + esc(p.name) + '</div>';
+    if (p.IPN) html += '<div style="font-size:11px;color:#888;font-family:monospace">' + esc(p.IPN) + '</div>';
+    html += '</div>';
+    html += '<div style="text-align:right;font-size:13px">';
+    if (cost > 0) html += '<div style="font-weight:600">$' + cost.toFixed(2) + '</div>';
+    html += '<div style="font-size:11px;color:var(--accent)">' + (bd.stock_qty || 0) + ' in stock</div>';
+    html += '</div></div>';
+  });
+  if (matches.length === 0) html = '<div style="color:#888;font-size:13px;padding:8px">No parts found</div>';
+  document.getElementById('rpResults').innerHTML = html;
+}
+
+async function addRepairPart(orderId, partPk, partName, partIpn, unitCost) {
+  if (BACKEND === 'lite') {
+    try {
+      await fetch(BASE + '/api/repairs/' + encodeURIComponent(orderId) + '/items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ part_pk: partPk, part_name: partName, part_ipn: partIpn, qty: 1, unit_cost: unitCost, item_type: 'part' }),
+      });
+    } catch(e) {}
+  }
+  showRepairOrder(orderId);
+}
+
+async function deleteRepairItem(itemId, orderId) {
+  if (BACKEND === 'lite') {
+    try { await fetch(BASE + '/api/repair-items/' + itemId, { method: 'DELETE' }); } catch(e) {}
+  }
+  showRepairOrder(orderId);
+}
+
+function showMachineRepairs(machineId) {
+  const repairs = allRepairs.filter(r => r.machine_id === machineId);
+  let html = '<div style="padding:20px">';
+  html += '<h3 style="margin:0 0 12px">Repair History — ' + esc(machineId) + '</h3>';
+  if (repairs.length === 0) {
+    html += '<div style="color:#888;font-size:13px;padding:16px;text-align:center">No repair orders yet.</div>';
+  }
+  repairs.forEach(r => {
+    const statusColors = { Draft: '#888', Approved: 'var(--blue-mid)', 'In Progress': 'var(--accent)', Complete: 'var(--green)' };
+    html += '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;background:white" onclick="closeModal();showRepairOrder(\'' + esc(r.id) + '\')">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+    html += '<div><div style="font-weight:600">' + esc(r.id) + '</div>';
+    html += '<div style="font-size:12px;color:#888">' + esc(r.repair_type || '') + ' &middot; ' + esc(r.date_opened || '') + '</div></div>';
+    html += '<span style="padding:4px 10px;border-radius:10px;font-size:11px;font-weight:700;background:' + (statusColors[r.status] || '#888') + ';color:white">' + esc(r.status) + '</span>';
+    html += '</div></div>';
+  });
+  html += '<button onclick="closeModal()" style="width:100%;margin-top:8px;padding:10px;background:#888;color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer">Close</button>';
+  html += '</div>';
+  document.getElementById('modalContent').innerHTML = html;
+  openModal();
+}
+
+// ============================================================
 // PARTS LIST
 // ============================================================
 function renderParts(parts) {
@@ -2503,26 +3230,37 @@ function renderParts(parts) {
     const bin = bd.bin || '';
     const binQty = bd.stock_qty || 0;
     const qrText = getPartQR(p);
-    return '<div class="card" style="padding:0;overflow:hidden">' +
-      '<div class="part-row" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')" style="padding:12px 14px;cursor:pointer">' +
-      '<div class="part-info">' +
-      '<div class="part-name">' + esc(p.name) + '</div>' +
-      (p.IPN ? '<div class="part-sku">' + esc(p.IPN) + '</div>' : '') +
-      '<div class="part-cat">' + esc(cat) +
+    // Machine compatibility: stored tag > text-match fallback
+    const storedFits = (bd.fits || '').split(',').map(s => s.trim()).filter(Boolean);
+    let fits = storedFits;
+    if (fits.length === 0) {
+      const pNotes = (p.notes || '').toLowerCase();
+      const pDesc = (p.description || '').toLowerCase();
+      const pName = (p.name || '').toLowerCase();
+      fits = [];
+      ['618', '900', '1200'].forEach(f => {
+        if (pNotes.includes(f) || pName.includes(f) || pDesc.includes('/' + f) || pDesc.includes(f + '/')) fits.push(f);
+      });
+    }
+    const fitsText = fits.length > 0 ? 'Fits: ' + fits.join(', ') : '';
+    return '<div class="card machine-card" onclick="scanAndShow(\'' + esc(p.IPN || p.name) + '\')">' +
+      '<div class="row">' +
+      '<div>' +
+      '<div class="card-title">' + esc(p.name) + '</div>' +
+      (p.IPN ? '<div class="card-sub" style="font-family:monospace">' + esc(p.IPN) + '</div>' : '') +
+      '<div class="card-sub">' + esc(cat) +
       (bin ? ' &middot; <strong style="color:var(--accent)">Bin ' + esc(bin) + '</strong>' : '') +
       '</div>' +
+      (fitsText ? '<div class="card-sub" style="color:var(--blue-mid);font-style:italic">' + fitsText + '</div>' : '<div class="card-sub" style="color:#ccc;font-style:italic">No machine tagged</div>') +
       '</div>' +
-      '<div class="part-stock">' +
-      '<div class="qty" style="color:' + (stock.total > 0 ? (isLow ? '#E65100' : 'var(--green)') : '#B71C1C') + '">' +
-      stock.total + '</div>' +
-      (bin ? '<div class="loc" style="color:var(--accent);font-weight:600">' + esc(bin) + '</div>' :
-       stock.items.length > 0 ? '<div class="loc">' + esc(stock.items[0].location) + '</div>' : '') +
-      '</div></div>' +
-      '<div style="display:flex;border-top:1px solid var(--border);font-size:12px">' +
-      '<button onclick="quickStockAdj(' + p.pk + ',1)" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:var(--green);font-weight:700;font-size:13px;cursor:pointer">+ Stock</button>' +
-      '<button onclick="quickStockAdj(' + p.pk + ',-1)" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:#888;font-weight:700;font-size:13px;cursor:pointer">- Stock</button>' +
-      '<button onclick="quickBinEdit(' + p.pk + ')" style="flex:1;padding:8px 0;background:none;border:none;border-right:1px solid var(--border);color:var(--accent);font-weight:600;font-size:12px;cursor:pointer">' + (bin ? 'Bin ' + esc(bin) : 'Set Bin') + '</button>' +
-      '<button onclick="printSingleLabel(\'' + esc(qrText) + '\',\'' + esc(p.name) + '\',\'part\')" style="flex:1;padding:8px 0;background:none;border:none;color:#555;font-weight:600;font-size:12px;cursor:pointer">QR</button>' +
+      '<span class="card-badge ' + (stock.total > 0 ? (isLow ? 'badge-low' : 'badge-ok') : 'badge-out') + '" style="font-size:14px;font-weight:700">' +
+      (stock.total > 0 ? stock.total : 'OUT') + '</span>' +
+      '</div>' +
+      '<div class="quick-actions">' +
+      '<button onclick="quickStockAdj(' + p.pk + ',1);event.stopPropagation()">+ Stock</button>' +
+      '<button onclick="quickStockAdj(' + p.pk + ',-1);event.stopPropagation()">- Stock</button>' +
+      '<button onclick="quickBinEdit(' + p.pk + ');event.stopPropagation()" style="background:var(--navy-light);color:var(--navy)">' + (bin ? 'Bin ' + esc(bin) : 'Set Bin') + '</button>' +
+      '<button onclick="printSingleLabel(\'' + esc(qrText) + '\',\'' + esc(p.name) + '\',\'part\');event.stopPropagation()" style="background:var(--accent-light);color:var(--accent-dark)">QR</button>' +
       '</div></div>';
   }).join('');
 }
@@ -2574,10 +3312,24 @@ function quickBinEdit(partPk) {
   const part = allParts.find(p => p.pk === partPk);
   if (!part) return;
   const bd = partBins[partPk] || {};
+  const curFits = (bd.fits || '').split(',').map(s => s.trim()).filter(Boolean);
   const html =
     '<div style="padding:20px">' +
-    '<h3 style="margin:0 0 4px">Edit Bin</h3>' +
+    '<h3 style="margin:0 0 4px">Edit Part</h3>' +
     '<div style="font-size:13px;color:#666;margin-bottom:16px">' + esc(part.name) + '</div>' +
+    '<label style="font-size:12px;font-weight:600;color:#888">Fits Machines</label>' +
+    '<div style="display:flex;gap:8px;margin:6px 0 14px">' +
+    ['618', '900', '1200'].map(f =>
+      '<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:2px solid ' +
+      (curFits.includes(f) ? 'var(--blue-mid)' : 'var(--border)') +
+      ';border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;background:' +
+      (curFits.includes(f) ? 'var(--navy-light)' : 'white') + '">' +
+      '<input type="checkbox" id="qbFits' + f + '" value="' + f + '"' +
+      (curFits.includes(f) ? ' checked' : '') +
+      ' style="width:18px;height:18px" onchange="this.parentElement.style.borderColor=this.checked?\'var(--blue-mid)\':\'var(--border)\';this.parentElement.style.background=this.checked?\'var(--navy-light)\':\'white\'">' +
+      f + '</label>'
+    ).join('') +
+    '</div>' +
     '<label style="font-size:12px;font-weight:600;color:#888">Bin Label</label>' +
     '<input id="qbBin" value="' + esc(bd.bin || '') + '" placeholder="e.g. A1, B3, SHELF-2" style="width:100%;padding:12px;border:2px solid var(--border);border-radius:8px;font-size:16px;font-weight:700;text-transform:uppercase;text-align:center;box-sizing:border-box;margin:4px 0 12px">' +
     '<label style="font-size:12px;font-weight:600;color:#888">Bin Qty</label>' +
@@ -2586,7 +3338,7 @@ function quickBinEdit(partPk) {
     '<input id="qbNotes" value="' + esc(bd.notes || '') + '" placeholder="Optional notes" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;margin:4px 0 12px">' +
     '<label style="font-size:12px;font-weight:600;color:#888">Custom QR Code</label>' +
     '<input id="qbQR" value="' + esc(bd.qr_code || '') + '" placeholder="Default: ' + esc(part.IPN || part.name) + '" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:monospace;box-sizing:border-box;margin:4px 0 16px">' +
-    '<button onclick="doQuickBinSave(' + partPk + ')" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Save Bin</button>' +
+    '<button onclick="doQuickBinSave(' + partPk + ')" style="width:100%;padding:14px;background:var(--accent);color:white;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">Save</button>' +
     '<div id="qbStatus" style="text-align:center;font-size:12px;margin-top:8px"></div>' +
     '</div>';
   document.getElementById('modalContent').innerHTML = html;
@@ -2598,14 +3350,17 @@ async function doQuickBinSave(partPk) {
   const qty = parseFloat(document.getElementById('qbQty').value) || 0;
   const notes = (document.getElementById('qbNotes').value || '').trim();
   const qr = (document.getElementById('qbQR').value || '').trim();
+  const fits = ['618', '900', '1200']
+    .filter(f => { const cb = document.getElementById('qbFits' + f); return cb && cb.checked; })
+    .join(',');
   const statusEl = document.getElementById('qbStatus');
 
   statusEl.textContent = 'Saving...';
   statusEl.style.color = '#888';
 
-  await saveBin(partPk, bin, qty, notes, qr);
+  await saveBin(partPk, bin, qty, notes, qr, fits);
 
-  statusEl.textContent = bin ? 'Saved — Bin ' + bin : 'Bin cleared';
+  statusEl.textContent = 'Saved' + (fits ? ' — Fits ' + fits : '') + (bin ? ' — Bin ' + bin : '');
   statusEl.style.color = 'var(--green)';
   setTimeout(() => { closeModal(); filterParts(); }, 800);
 }
@@ -2622,14 +3377,28 @@ function filterParts() {
         && !((partBins[p.pk]?.bin||'').toLowerCase().includes(q))) return false;
     if (cat && (allCategories[p.category]||'') !== cat) return false;
     if (machine) {
-      const notes = (p.notes||'').toLowerCase();
-      const desc = (p.description||'').toLowerCase();
+      const storedFits = (partBins[p.pk]?.fits || '').toLowerCase();
       const name = (p.name||'').toLowerCase();
-      if (!notes.includes(machine) && !name.includes(machine) && !desc.includes(machine)) return false;
+      const desc = (p.description||'').toLowerCase();
+      if (!storedFits.includes(machine) && !name.includes(machine) && !desc.includes(machine)) return false;
     }
     return true;
   });
   renderParts(filtered);
+}
+
+async function autoTagMachines() {
+  if (!confirm('Auto-tag parts with machine compatibility?\n\nThis uses part names, IPN prefixes (T1=618, T9=900, T48=1200), and universal categories to assign machine tags.\n\nAlready-tagged parts will NOT be overwritten.')) return;
+  try {
+    const r = await fetch(BACKEND_URL + '/api/auto-tag-machines', { method: 'POST' });
+    const data = await r.json();
+    alert('Auto-tag complete!\n\nTagged: ' + data.tagged + ' parts\nSkipped (already tagged): ' + data.skipped_existing + '\nTotal parts: ' + data.total_parts);
+    // Reload bins to pick up new fits data
+    await syncBins();
+    filterParts();
+  } catch (e) {
+    alert('Auto-tag failed: ' + e.message);
+  }
 }
 
 function scanAndShow(val) {
@@ -3028,6 +3797,64 @@ function esc(s) {
   d.textContent = String(s);
   return d.innerHTML;
 }
+
+// ============================================================
+// KEYBOARD SHORTCUTS
+// ============================================================
+document.addEventListener('keydown', function(e) {
+  const tag = (e.target.tagName || '').toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
+
+  // Ctrl combos work everywhere (even in inputs)
+  if (e.ctrlKey || e.metaKey) {
+    if (e.key === 's') { e.preventDefault(); /* click any visible save button */ const btn = document.querySelector('.modal-bg.open .save-btn, .modal-bg.open button[onclick*="Save"], .modal-bg.open button[onclick*="save"]'); if (btn) btn.click(); return; }
+    if (e.key === 'p') { e.preventDefault(); const active = document.querySelector('.panel.active'); if (active && active.id === 'report-panel') { const btn = document.querySelector('#reportModalBg.open button[onclick*="print"], button[onclick*="Print"]'); if (btn) btn.click(); } return; }
+    if (e.key === 'b') { e.preventDefault(); if (typeof doBackup === 'function') doBackup(); return; }
+    return;
+  }
+
+  // In input fields: only Escape works
+  if (inInput) {
+    if (e.key === 'Escape') { e.target.blur(); return; }
+    return;
+  }
+
+  // Escape: close modals
+  if (e.key === 'Escape') {
+    if (document.getElementById('reportModalBg').classList.contains('open')) { closeReportModal(); return; }
+    if (document.getElementById('modalBg').classList.contains('open')) { closeModal(); return; }
+    return;
+  }
+
+  // 1-6: tab navigation
+  const tabs = ['scan', 'fleet', 'parts', 'bins', 'report', 'settings'];
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 6) {
+    const name = tabs[num - 1];
+    showTab(name, document.querySelectorAll('.tab-bar button')[num - 1]);
+    return;
+  }
+
+  // / = focus search
+  if (e.key === '/') {
+    e.preventDefault();
+    const active = document.querySelector('.panel.active');
+    const search = active ? active.querySelector('input[type="search"], input[type="text"]') : null;
+    (search || document.getElementById('scanInput')).focus();
+    return;
+  }
+
+  // N = new item for current tab
+  if (e.key === 'n' || e.key === 'N') {
+    const active = document.querySelector('.panel.active');
+    if (active && active.id === 'fleet-panel') showAddMachine();
+    else if (active && active.id === 'bins-panel') showAddBinModal();
+    return;
+  }
+
+  // R = sync
+  if (e.key === 'r' || e.key === 'R') { doSyncNow(); return; }
+});
 
 // ============================================================
 // GO

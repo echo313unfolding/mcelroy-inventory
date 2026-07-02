@@ -73,12 +73,47 @@ def init_db():
             qr_code TEXT DEFAULT ''
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS repair_orders (
+            id TEXT PRIMARY KEY,
+            machine_id TEXT NOT NULL,
+            date_opened TEXT DEFAULT '',
+            date_closed TEXT DEFAULT '',
+            repair_type TEXT DEFAULT '',
+            status TEXT DEFAULT 'Draft',
+            complaint TEXT DEFAULT '',
+            work_performed TEXT DEFAULT '',
+            labor_hours REAL DEFAULT 0,
+            labor_rate REAL DEFAULT 110,
+            outside_hours REAL DEFAULT 0,
+            outside_rate REAL DEFAULT 150,
+            constraint_notes TEXT DEFAULT '',
+            notes TEXT DEFAULT ''
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS repair_order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id TEXT NOT NULL,
+            part_pk INTEGER DEFAULT 0,
+            part_name TEXT DEFAULT '',
+            part_ipn TEXT DEFAULT '',
+            qty REAL DEFAULT 1,
+            unit_cost REAL DEFAULT 0,
+            item_type TEXT DEFAULT 'part'
+        )
+    """)
     db.commit()
 
-    # Migrate: add qr_code columns if missing (v0.1 upgrade)
-    for table, col in [("machines", "qr_code"), ("part_bins", "qr_code")]:
+    # Migrate: add columns if missing
+    migrations = [
+        ("machines", "qr_code", "TEXT DEFAULT ''"),
+        ("part_bins", "qr_code", "TEXT DEFAULT ''"),
+        ("part_bins", "fits", "TEXT DEFAULT ''"),
+    ]
+    for table, col, coltype in migrations:
         try:
-            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT DEFAULT ''")
+            db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
             db.commit()
         except sqlite3.OperationalError:
             pass  # Column already exists
@@ -104,7 +139,7 @@ def init_db():
 # HTTP HANDLER
 # ============================================================
 
-class ShopHandler(http.server.SimpleHTTPRequestHandler):
+class ShopHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
@@ -137,6 +172,17 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
             part_pk = path[len("/api/bins/"):].rstrip("/")
             return self._get_bin(part_pk)
 
+        if path == "/api/repairs":
+            return self._get_repairs()
+
+        if path.startswith("/api/repairs/") and "/items" not in path:
+            order_id = urllib.parse.unquote(path[len("/api/repairs/"):].rstrip("/"))
+            return self._get_repair(order_id)
+
+        if path.startswith("/api/repairs/") and path.endswith("/items"):
+            order_id = urllib.parse.unquote(path[len("/api/repairs/"):-len("/items")])
+            return self._get_repair_items(order_id)
+
         # Static files from shop/
         if path.startswith("/shop/"):
             rel = path[len("/shop/"):]
@@ -168,6 +214,31 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
                 return
             return self._update_bin(part_pk, body)
 
+        if path.startswith("/api/repairs/") and path.endswith("/items"):
+            order_id = urllib.parse.unquote(path[len("/api/repairs/"):-len("/items")])
+            body = self._read_body()
+            if body is None:
+                return
+            return self._add_repair_item(order_id, body)
+
+        if path.startswith("/api/repairs/"):
+            order_id = urllib.parse.unquote(path[len("/api/repairs/"):].rstrip("/"))
+            body = self._read_body()
+            if body is None:
+                return
+            return self._update_repair(order_id, body)
+
+        self.send_error(404)
+
+    def do_POST(self):
+        path = urllib.parse.urlparse(self.path).path
+        if path == "/api/repairs":
+            body = self._read_body()
+            if body is None:
+                return
+            return self._create_repair(body)
+        if path == "/api/auto-tag-machines":
+            return self._auto_tag_machines()
         self.send_error(404)
 
     def do_DELETE(self):
@@ -176,6 +247,14 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
         if path.startswith("/api/fleet/"):
             machine_id = urllib.parse.unquote(path[len("/api/fleet/"):].rstrip("/"))
             return self._delete_machine(machine_id)
+
+        if path.startswith("/api/repair-items/"):
+            item_id = path[len("/api/repair-items/"):].rstrip("/")
+            return self._delete_repair_item(item_id)
+
+        if path.startswith("/api/repairs/"):
+            order_id = urllib.parse.unquote(path[len("/api/repairs/"):].rstrip("/"))
+            return self._delete_repair(order_id)
 
         self.send_error(404)
 
@@ -275,7 +354,7 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
         db = get_db()
         row = db.execute("SELECT * FROM part_bins WHERE part_pk = ?", (part_pk,)).fetchone()
         if row:
-            allowed = {"bin", "stock_qty", "notes", "qr_code"}
+            allowed = {"bin", "stock_qty", "notes", "qr_code", "fits"}
             updates = {k: v for k, v in data.items() if k in allowed}
             if updates:
                 set_clause = ", ".join(f"{k} = ?" for k in updates)
@@ -283,13 +362,188 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
                 db.execute(f"UPDATE part_bins SET {set_clause} WHERE part_pk = ?", values)
         else:
             db.execute(
-                "INSERT INTO part_bins (part_pk, bin, stock_qty, notes, qr_code) VALUES (?, ?, ?, ?, ?)",
-                (part_pk, data.get("bin", ""), data.get("stock_qty", 0), data.get("notes", ""), data.get("qr_code", "")),
+                "INSERT INTO part_bins (part_pk, bin, stock_qty, notes, qr_code, fits) VALUES (?, ?, ?, ?, ?, ?)",
+                (part_pk, data.get("bin", ""), data.get("stock_qty", 0), data.get("notes", ""), data.get("qr_code", ""), data.get("fits", "")),
             )
         db.commit()
         row = db.execute("SELECT * FROM part_bins WHERE part_pk = ?", (part_pk,)).fetchone()
         db.close()
         self._json_response(dict(row))
+
+    # ---- Repair Order handlers ----
+
+    def _get_repairs(self):
+        db = get_db()
+        rows = db.execute("SELECT * FROM repair_orders ORDER BY date_opened DESC").fetchall()
+        db.close()
+        self._json_response([dict(r) for r in rows])
+
+    def _get_repair(self, order_id):
+        db = get_db()
+        row = db.execute("SELECT * FROM repair_orders WHERE id = ?", (order_id,)).fetchone()
+        if not row:
+            db.close()
+            self.send_error(404, f"Repair order {order_id} not found")
+            return
+        order = dict(row)
+        items = db.execute("SELECT * FROM repair_order_items WHERE order_id = ?", (order_id,)).fetchall()
+        db.close()
+        order["items"] = [dict(i) for i in items]
+        self._json_response(order)
+
+    def _get_repair_items(self, order_id):
+        db = get_db()
+        rows = db.execute("SELECT * FROM repair_order_items WHERE order_id = ?", (order_id,)).fetchall()
+        db.close()
+        self._json_response([dict(r) for r in rows])
+
+    def _create_repair(self, data):
+        db = get_db()
+        order_id = data.get("id", f"RO-{int(__import__('time').time())}")
+        db.execute(
+            "INSERT INTO repair_orders (id, machine_id, date_opened, repair_type, status, complaint, labor_rate, outside_rate) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (order_id, data.get("machine_id", ""), data.get("date_opened", ""),
+             data.get("repair_type", ""), data.get("status", "Draft"),
+             data.get("complaint", ""), data.get("labor_rate", 110), data.get("outside_rate", 150)),
+        )
+        db.commit()
+        row = db.execute("SELECT * FROM repair_orders WHERE id = ?", (order_id,)).fetchone()
+        db.close()
+        self._json_response(dict(row))
+
+    def _update_repair(self, order_id, data):
+        db = get_db()
+        allowed = {"machine_id", "date_opened", "date_closed", "repair_type", "status",
+                    "complaint", "work_performed", "labor_hours", "labor_rate",
+                    "outside_hours", "outside_rate", "constraint_notes", "notes"}
+        updates = {k: v for k, v in data.items() if k in allowed}
+        if updates:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            values = list(updates.values()) + [order_id]
+            db.execute(f"UPDATE repair_orders SET {set_clause} WHERE id = ?", values)
+            db.commit()
+        row = db.execute("SELECT * FROM repair_orders WHERE id = ?", (order_id,)).fetchone()
+        if not row:
+            db.close()
+            self.send_error(404)
+            return
+        order = dict(row)
+        items = db.execute("SELECT * FROM repair_order_items WHERE order_id = ?", (order_id,)).fetchall()
+        db.close()
+        order["items"] = [dict(i) for i in items]
+        self._json_response(order)
+
+    def _add_repair_item(self, order_id, data):
+        db = get_db()
+        db.execute(
+            "INSERT INTO repair_order_items (order_id, part_pk, part_name, part_ipn, qty, unit_cost, item_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (order_id, data.get("part_pk", 0), data.get("part_name", ""),
+             data.get("part_ipn", ""), data.get("qty", 1),
+             data.get("unit_cost", 0), data.get("item_type", "part")),
+        )
+        db.commit()
+        items = db.execute("SELECT * FROM repair_order_items WHERE order_id = ?", (order_id,)).fetchall()
+        db.close()
+        self._json_response([dict(i) for i in items])
+
+    def _delete_repair_item(self, item_id):
+        db = get_db()
+        db.execute("DELETE FROM repair_order_items WHERE id = ?", (item_id,))
+        db.commit()
+        db.close()
+        self._json_response({"deleted": item_id})
+
+    def _delete_repair(self, order_id):
+        db = get_db()
+        db.execute("DELETE FROM repair_order_items WHERE order_id = ?", (order_id,))
+        db.execute("DELETE FROM repair_orders WHERE id = ?", (order_id,))
+        db.commit()
+        db.close()
+        self._json_response({"deleted": order_id})
+
+    # ---- Auto-tag machine compatibility ----
+
+    def _auto_tag_machines(self):
+        """Auto-populate 'fits' field on parts using text matching and IPN prefix heuristics."""
+        parts_file = os.path.join(SHOP_DIR, "parts_data.json")
+        if not os.path.isfile(parts_file):
+            return self._json_response({"error": "parts_data.json not found"}, 400)
+
+        with open(parts_file) as f:
+            pdata = json.load(f)
+
+        parts = pdata.get("parts", [])
+        cats = pdata.get("categories", {})
+
+        # Universal categories — fit ALL machines
+        universal_cats = {29, 30, 31, 32, 33, 34, 27, 28, 37}  # Consumables, Filters, Heater Supplies, Fusion, Safety, Accessories, DataLogger, Tensile
+
+        tagged_count = 0
+        skipped_count = 0
+        db = get_db()
+
+        for p in parts:
+            pk = p["pk"]
+            # Skip if already has a fits value
+            row = db.execute("SELECT fits FROM part_bins WHERE part_pk = ?", (pk,)).fetchone()
+            if row and row["fits"]:
+                skipped_count += 1
+                continue
+
+            machines = set()
+            name = p.get("name", "")
+            desc = p.get("description", "")
+            ipn = p.get("IPN", "")
+            cat = p.get("category", 0)
+            text = f"{name} {desc}".lower()
+
+            # Strategy 1: Text match (highest confidence)
+            if re.search(r'(?:^|[^0-9])618(?:[^0-9]|$)', text):
+                machines.add("618")
+            if re.search(r'(?:^|[^0-9])900(?:[^0-9]|$)', text):
+                machines.add("900")
+            if re.search(r'(?:^|[^0-9])1200(?:[^0-9]|$)', text):
+                machines.add("1200")
+            # 412 is 618 family sub-model
+            if re.search(r'(?:^|[^0-9])412(?:[^0-9]|$)', text):
+                machines.add("618")
+
+            # Strategy 2: IPN prefix (good confidence)
+            ipn_upper = ipn.upper()
+            if ipn_upper.startswith("T1") and not ipn_upper.startswith("T12"):
+                machines.add("618")
+            if ipn_upper.startswith("T9"):
+                machines.add("900")
+            if ipn_upper.startswith("T4"):
+                machines.add("1200")
+
+            # Strategy 3: Universal categories → all machines
+            if cat in universal_cats:
+                machines = {"618", "900", "1200"}
+
+            if not machines:
+                continue
+
+            fits = ",".join(sorted(machines))
+            # Upsert into part_bins
+            if row is not None:
+                db.execute("UPDATE part_bins SET fits = ? WHERE part_pk = ?", (fits, pk))
+            else:
+                db.execute(
+                    "INSERT INTO part_bins (part_pk, bin, stock_qty, notes, qr_code, fits) VALUES (?, '', 0, '', '', ?)",
+                    (pk, fits),
+                )
+            tagged_count += 1
+
+        db.commit()
+        db.close()
+        self._json_response({
+            "tagged": tagged_count,
+            "skipped_existing": skipped_count,
+            "total_parts": len(parts),
+        })
 
     # ---- Helpers ----
 
@@ -308,6 +562,7 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", len(body))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self._cors_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -325,7 +580,7 @@ class ShopHandler(http.server.SimpleHTTPRequestHandler):
 
     def _cors_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _guess_type(self, filepath):
